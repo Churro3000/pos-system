@@ -1,5 +1,6 @@
 {
-  "rootDirectory": "pos-system",
   "buildCommand": "npm run build",
-  "outputDirectory": "pos-system/dist"
+  "outputDirectory": "pos-system/dist",
+  "installCommand": "npm install",
+  "framework": "vite"
 }
