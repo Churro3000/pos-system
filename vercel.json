@@ -1,5 +1,0 @@
-{
-  "buildCommand": "cd pos-system && npm install && npm run build",
-  "outputDirectory": "pos-system/dist",
-  "framework": null
-}
