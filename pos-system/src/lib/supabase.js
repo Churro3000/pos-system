@@ -1,0 +1,39 @@
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
+
+// Products
+export async function getProducts() {
+  const { data } = await supabase.from('products').select('*').order('name')
+  return data || []
+}
+
+export async function saveProduct(product) {
+  const { error } = await supabase.from('products').upsert(product, { onConflict: 'barcode' })
+  return error
+}
+
+export async function updateStock(id, newStock) {
+  const { error } = await supabase.from('products').update({ stock: newStock }).eq('id', id)
+  return error
+}
+
+// Sales
+export async function saveSale(sale) {
+  const { error } = await supabase.from('sales').insert(sale)
+  return error
+}
+
+export async function getSales() {
+  const { data } = await supabase.from('sales').select('*').order('created_at', { ascending: false })
+  return data || []
+}
+
+// Discounts
+export async function getDiscount(code) {
+  const { data } = await supabase.from('discounts').select('*').eq('code', code.toUpperCase()).single()
+  return data
+}
