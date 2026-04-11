@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { savePurchase, saveProduct, getProducts } from '../lib/supabase'
+import { useState, useEffect } from 'react'
+import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers } from '../lib/supabase'
 
 const VAT_RATE = 0.14
 
@@ -26,6 +26,40 @@ function Purchase() {
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
   const [saving, setSaving] = useState(false)
+  const [suppliers, setSuppliers] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [filteredSuppliers, setFilteredSuppliers] = useState([])
+
+  useEffect(() => {
+    fetchSuppliers()
+  }, [])
+
+  async function fetchSuppliers() {
+    const data = await getSuppliers()
+    setSuppliers(data)
+  }
+
+  function handleSupplierInput(value) {
+    setSupplierName(value)
+    if (value.length > 0) {
+      const matches = suppliers.filter(s =>
+        s.name.toLowerCase().includes(value.toLowerCase())
+      )
+      setFilteredSuppliers(matches)
+      setShowSuggestions(true)
+    } else {
+      setShowSuggestions(false)
+      setSupplierContact('')
+      setSupplierEmail('')
+    }
+  }
+
+  function selectSupplier(supplier) {
+    setSupplierName(supplier.name)
+    setSupplierContact(supplier.contact || '')
+    setSupplierEmail(supplier.email || '')
+    setShowSuggestions(false)
+  }
 
   function updateProduct(index, field, value) {
     const updated = [...products]
@@ -106,6 +140,13 @@ function Purchase() {
     setSaving(true)
     const { totalExVat, totalVat, totalIncVat } = getTotals()
 
+    // Save or update supplier
+    await saveSupplier({
+      name: supplierName,
+      contact: supplierContact,
+      email: supplierEmail,
+    })
+
     const purchase = {
       supplier_name: supplierName,
       supplier_contact: supplierContact,
@@ -130,9 +171,11 @@ function Purchase() {
     const existingProducts = await getProducts()
     for (const p of products) {
       const existing = existingProducts.find(e => e.barcode === p.barcode)
-      const newStock = existing ? existing.stock + parseInt(p.quantity) : parseInt(p.quantity)
+      const newStock = existing
+        ? existing.stock + parseInt(p.quantity)
+        : parseInt(p.quantity)
       await saveProduct({
-        barcode: p.barcode || `GEN-${Date.now()}`,
+        barcode: p.barcode || `GEN-${Date.now()}-${Math.random()}`,
         name: p.name,
         cost_price: parseFloat(p.cost_price),
         selling_price: parseFloat(p.selling_price) || parseFloat(p.cost_price) * 1.3,
@@ -150,6 +193,7 @@ function Purchase() {
     setInvoiceNumber('')
     setNotes('')
     setProducts([emptyProduct()])
+    fetchSuppliers()
     setSaving(false)
   }
 
@@ -164,15 +208,44 @@ function Purchase() {
       <div className="supplier-section">
         <h3>Supplier Details</h3>
         <div className="form-grid">
-          <div className="form-group full">
+          <div className="form-group full" style={{ position: 'relative' }}>
             <label>Supplier Name *</label>
             <input
               type="text"
-              placeholder="e.g. ABC Wholesalers"
+              placeholder="Type or select supplier..."
               value={supplierName}
-              onChange={e => setSupplierName(e.target.value)}
+              onChange={e => handleSupplierInput(e.target.value)}
+              onFocus={() => {
+                if (supplierName.length > 0) setShowSuggestions(true)
+              }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              autoComplete="off"
             />
+            {showSuggestions && filteredSuppliers.length > 0 && (
+              <div className="autocomplete-dropdown">
+                {filteredSuppliers.map(s => (
+                  <div
+                    key={s.id}
+                    className="autocomplete-item"
+                    onMouseDown={() => selectSupplier(s)}
+                  >
+                    <span className="autocomplete-name">{s.name}</span>
+                    {s.contact && (
+                      <span className="autocomplete-sub">{s.contact}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {showSuggestions && filteredSuppliers.length === 0 && supplierName && (
+              <div className="autocomplete-dropdown">
+                <div className="autocomplete-item new">
+                  ✨ New supplier: <strong>{supplierName}</strong>
+                </div>
+              </div>
+            )}
           </div>
+
           <div className="form-group">
             <label>Contact Number</label>
             <input
@@ -328,7 +401,7 @@ function Purchase() {
           <span>Total Excluding VAT:</span>
           <span>P{totalExVat.toFixed(2)}</span>
         </div>
-        <div className="totals-row">
+        <div className="totals-row" style={{ color: '#e67e00' }}>
           <span>Total VAT (14%):</span>
           <span>P{totalVat.toFixed(2)}</span>
         </div>

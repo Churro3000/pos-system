@@ -802,6 +802,141 @@ tr:hover td {
   margin-bottom: 14px;
 }
 
+/* ===== AUTOCOMPLETE ===== */
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #1a1a2e;
+  border-radius: 8px;
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.autocomplete-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.autocomplete-item:hover {
+  background: #f0f4ff;
+}
+
+.autocomplete-item.new {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.autocomplete-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.autocomplete-sub {
+  font-size: 0.78rem;
+  color: #888;
+}
+
+/* ===== SUPPLIERS GRID ===== */
+.suppliers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.supplier-card {
+  background: #f9f9ff;
+  border: 2px solid #e0e0ff;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.supplier-card:hover {
+  border-color: #1a1a2e;
+  background: #f0f4ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.supplier-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.supplier-icon {
+  font-size: 1.4rem;
+}
+
+.supplier-card-header h4 {
+  font-size: 1rem;
+  color: #1a1a2e;
+}
+
+.supplier-card-info p {
+  font-size: 0.82rem;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.supplier-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e0ff;
+}
+
+.supplier-card-stats span {
+  background: #1a1a2e;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+}
+
+/* ===== SUPPLIER DETAIL ===== */
+.supplier-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  background: #f9f9ff;
+  border-radius: 10px;
+  border: 1px solid #e0e0ff;
+}
+
+.supplier-detail-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.supplier-detail-title h3 {
+  margin: 0;
+}
+
+.supplier-detail-title span {
+  font-size: 0.85rem;
+  color: #666;
+}
+
 /* ===== PRINT STYLES ===== */
 @media print {
   .no-print, header, nav, .hint,

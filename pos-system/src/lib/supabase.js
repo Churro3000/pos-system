@@ -64,3 +64,16 @@ export async function updateQuotationStatus(id, status) {
   const { error } = await supabase.from('quotations').update({ status }).eq('id', id)
   return error
 }
+
+// Suppliers
+export async function getSuppliers() {
+  const { data } = await supabase.from('suppliers').select('*').order('name')
+  return data || []
+}
+
+export async function saveSupplier(supplier) {
+  const { error } = await supabase
+    .from('suppliers')
+    .upsert(supplier, { onConflict: 'name' })
+  return error
+}
