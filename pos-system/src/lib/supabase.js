@@ -37,3 +37,30 @@ export async function getDiscount(code) {
   const { data } = await supabase.from('discounts').select('*').eq('code', code.toUpperCase()).single()
   return data
 }
+
+// Purchases
+export async function savePurchase(purchase) {
+  const { error } = await supabase.from('purchases').insert(purchase)
+  return error
+}
+
+export async function getPurchases() {
+  const { data } = await supabase.from('purchases').select('*').order('created_at', { ascending: false })
+  return data || []
+}
+
+// Quotations
+export async function saveQuotation(quotation) {
+  const { error } = await supabase.from('quotations').insert(quotation)
+  return error
+}
+
+export async function getQuotations() {
+  const { data } = await supabase.from('quotations').select('*').order('created_at', { ascending: false })
+  return data || []
+}
+
+export async function updateQuotationStatus(id, status) {
+  const { error } = await supabase.from('quotations').update({ status }).eq('id', id)
+  return error
+}

@@ -3,6 +3,8 @@ import Inventory from './components/Inventory'
 import Checkout from './components/Checkout'
 import Dashboard from './components/Dashboard'
 import Sales from './components/Sales'
+import Purchase from './components/Purchase'
+import Quotation from './components/Quotation'
 import './App.css'
 
 function App() {
@@ -11,7 +13,9 @@ function App() {
   const tabs = [
     { id: 'checkout', label: '🛒 Checkout' },
     { id: 'inventory', label: '📦 Inventory' },
-    { id: 'sales', label: '🧾 Sales History' },
+    { id: 'purchase', label: '🧾 Purchase' },
+    { id: 'quotation', label: '📋 Quotation' },
+    { id: 'sales', label: '📈 Sales' },
     { id: 'dashboard', label: '📊 Dashboard' },
   ]
 
@@ -34,6 +38,8 @@ function App() {
       <main>
         {mode === 'inventory' && <Inventory />}
         {mode === 'checkout' && <Checkout />}
+        {mode === 'purchase' && <Purchase />}
+        {mode === 'quotation' && <Quotation />}
         {mode === 'sales' && <Sales />}
         {mode === 'dashboard' && <Dashboard />}
       </main>

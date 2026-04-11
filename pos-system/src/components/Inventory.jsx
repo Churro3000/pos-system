@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { getProducts, saveProduct } from '../lib/supabase'
 
-const CATEGORIES = ['General', 'Food & Drink', 'Clothing', 'Electronics', 'Household', 'Other']
-
 function Inventory() {
   const [barcode, setBarcode] = useState('')
   const [name, setName] = useState('')
-  const [category, setCategory] = useState('General')
   const [costPrice, setCostPrice] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
   const [stock, setStock] = useState('')
@@ -15,7 +12,6 @@ function Inventory() {
   const [messageType, setMessageType] = useState('success')
   const [products, setProducts] = useState([])
   const [search, setSearch] = useState('')
-  const [filterCategory, setFilterCategory] = useState('All')
   const barcodeRef = useRef(null)
 
   useEffect(() => {
@@ -45,11 +41,10 @@ function Inventory() {
     const product = {
       barcode,
       name,
-      category,
       cost_price: parseFloat(costPrice),
       selling_price: parseFloat(sellingPrice),
       stock: parseInt(stock),
-      low_stock_alert: parseInt(lowStockAlert)
+      low_stock_alert: parseInt(lowStockAlert),
     }
 
     const error = await saveProduct(product)
@@ -62,7 +57,6 @@ function Inventory() {
       setMessageType('success')
       setBarcode('')
       setName('')
-      setCategory('General')
       setCostPrice('')
       setSellingPrice('')
       setStock('')
@@ -73,17 +67,14 @@ function Inventory() {
   }
 
   const margin = getMargin()
-
-  const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.barcode.includes(search)
-    const matchCategory = filterCategory === 'All' || p.category === filterCategory
-    return matchSearch && matchCategory
-  })
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.barcode.includes(search)
+  )
 
   return (
     <div className="panel">
-      <h2>📦 Inventory Mode</h2>
+      <h2>📦 Inventory</h2>
       <p className="hint">Scan a barcode to begin adding or updating a product.</p>
 
       <div className="form-grid">
@@ -97,7 +88,6 @@ function Inventory() {
             onChange={e => setBarcode(e.target.value)}
           />
         </div>
-
         <div className="form-group full">
           <label>Product Name *</label>
           <input
@@ -107,24 +97,6 @@ function Inventory() {
             onChange={e => setName(e.target.value)}
           />
         </div>
-
-        <div className="form-group">
-          <label>Category</label>
-          <select value={category} onChange={e => setCategory(e.target.value)}>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>Stock Quantity *</label>
-          <input
-            type="number"
-            placeholder="e.g. 50"
-            value={stock}
-            onChange={e => setStock(e.target.value)}
-          />
-        </div>
-
         <div className="form-group">
           <label>Cost Price (P) *</label>
           <input
@@ -134,7 +106,6 @@ function Inventory() {
             onChange={e => setCostPrice(e.target.value)}
           />
         </div>
-
         <div className="form-group">
           <label>Selling Price (P) *</label>
           <input
@@ -144,7 +115,15 @@ function Inventory() {
             onChange={e => setSellingPrice(e.target.value)}
           />
         </div>
-
+        <div className="form-group">
+          <label>Stock Quantity *</label>
+          <input
+            type="number"
+            placeholder="e.g. 50"
+            value={stock}
+            onChange={e => setStock(e.target.value)}
+          />
+        </div>
         <div className="form-group">
           <label>Low Stock Alert</label>
           <input
@@ -154,7 +133,6 @@ function Inventory() {
             onChange={e => setLowStockAlert(e.target.value)}
           />
         </div>
-
         <div className="form-group margin-display">
           <label>Profit Margin</label>
           <div className={`margin-badge ${margin >= 30 ? 'good' : margin >= 10 ? 'ok' : 'low'}`}>
@@ -167,9 +145,7 @@ function Inventory() {
         Save Product
       </button>
 
-      {message && (
-        <p className={`message ${messageType}`}>{message}</p>
-      )}
+      {message && <p className={`message ${messageType}`}>{message}</p>}
 
       <div className="section-header">
         <h3>Products ({filtered.length})</h3>
@@ -180,10 +156,6 @@ function Inventory() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-            <option>All</option>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-          </select>
         </div>
       </div>
 
@@ -192,7 +164,6 @@ function Inventory() {
           <tr>
             <th>Barcode</th>
             <th>Name</th>
-            <th>Category</th>
             <th>Cost</th>
             <th>Price</th>
             <th>Margin</th>
@@ -207,7 +178,6 @@ function Inventory() {
               <tr key={p.id} className={lowStock ? 'low-stock-row' : ''}>
                 <td>{p.barcode}</td>
                 <td>{p.name}</td>
-                <td><span className="badge">{p.category}</span></td>
                 <td>P{parseFloat(p.cost_price).toFixed(2)}</td>
                 <td>P{parseFloat(p.selling_price).toFixed(2)}</td>
                 <td><span className={`margin-badge small ${m >= 30 ? 'good' : m >= 10 ? 'ok' : 'low'}`}>{m}%</span></td>
