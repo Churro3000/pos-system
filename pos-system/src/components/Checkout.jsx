@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase, getDiscount, saveSale, updateStock } from '../lib/supabase'
 import ReceiptPreview from './ReceiptPreview'
 
+const VAT_RATE = 0.14
+
 function Checkout() {
   const [barcode, setBarcode] = useState('')
   const [items, setItems] = useState([])
@@ -65,17 +67,25 @@ function Checkout() {
     return items.reduce((sum, i) => sum + (i.selling_price * i.qty), 0)
   }
 
-  function getDiscountAmount() {
+  function getVATAmount() {
+    return getSubtotal() * VAT_RATE
+  }
+
+  function getDiscountAmount(subtotalWithVAT) {
     if (!appliedDiscount) return 0
-    const subtotal = getSubtotal()
     if (appliedDiscount.type === 'percent') {
-      return (subtotal * appliedDiscount.value) / 100
+      return (subtotalWithVAT * appliedDiscount.value) / 100
     }
     return appliedDiscount.value
   }
 
   function getTotal() {
-    return getSubtotal() - getDiscountAmount()
+    const subtotalWithVAT = getSubtotal() + getVATAmount()
+    return subtotalWithVAT - getDiscountAmount(subtotalWithVAT)
+  }
+
+  function getProfit() {
+    return items.reduce((sum, i) => sum + ((i.selling_price - i.cost_price) * i.qty), 0)
   }
 
   async function applyDiscount() {
@@ -86,22 +96,17 @@ function Checkout() {
       setMessageType('error')
     } else {
       setAppliedDiscount(discount)
-      setMessage(`✅ Discount "${discount.code}" applied! ${discount.type === 'percent' ? discount.value + '%' : 'P' + discount.value} off`)
+      setMessage(`✅ Discount "${discount.code}" applied!`)
       setMessageType('success')
     }
   }
 
   async function handleConfirmSale(editedItems) {
     const subtotal = editedItems.reduce((sum, i) => sum + (i.selling_price * i.qty), 0)
-    let discountAmount = 0
-    if (appliedDiscount) {
-      if (appliedDiscount.type === 'percent') {
-        discountAmount = (subtotal * appliedDiscount.value) / 100
-      } else {
-        discountAmount = appliedDiscount.value
-      }
-    }
-    const total = subtotal - discountAmount
+    const vatAmount = subtotal * VAT_RATE
+    const subtotalWithVAT = subtotal + vatAmount
+    const discountAmount = getDiscountAmount(subtotalWithVAT)
+    const total = subtotalWithVAT - discountAmount
     const profit = editedItems.reduce((sum, i) => sum + ((i.selling_price - i.cost_price) * i.qty), 0) - discountAmount
 
     const sale = {
@@ -111,8 +116,10 @@ function Checkout() {
         qty: i.qty,
         cost_price: i.cost_price,
         selling_price: i.selling_price,
+        serial_number: i.serial_number || null,
       })),
       subtotal,
+      vat_amount: vatAmount,
       discount_amount: discountAmount,
       total,
       profit,
@@ -128,8 +135,7 @@ function Checkout() {
     for (const item of editedItems) {
       const original = items.find(i => i.barcode === item.barcode)
       if (original) {
-        const newStock = original.stock - item.qty
-        await updateStock(original.id, newStock)
+        await updateStock(original.id, original.stock - item.qty)
       }
     }
 
@@ -143,7 +149,9 @@ function Checkout() {
   }
 
   const subtotal = getSubtotal()
-  const discountAmount = getDiscountAmount()
+  const vatAmount = getVATAmount()
+  const subtotalWithVAT = subtotal + vatAmount
+  const discountAmount = getDiscountAmount(subtotalWithVAT)
   const total = getTotal()
 
   return (
@@ -172,7 +180,7 @@ function Checkout() {
               <tr>
                 <th>Product</th>
                 <th>Qty</th>
-                <th>Price</th>
+                <th>Unit Price</th>
                 <th>Total</th>
                 <th>🗑️</th>
               </tr>
@@ -180,7 +188,14 @@ function Checkout() {
             <tbody>
               {items.map(item => (
                 <tr key={item.barcode}>
-                  <td>{item.name}</td>
+                  <td>
+                    {item.name}
+                    {item.serial_number && (
+                      <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                        S/N: {item.serial_number}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <div className="qty-control">
                       <button onClick={() => updateQty(item.barcode, item.qty - 1)}>−</button>
@@ -200,8 +215,12 @@ function Checkout() {
 
           <div className="totals-summary">
             <div className="totals-row">
-              <span>Subtotal:</span>
+              <span>Subtotal (excl. VAT):</span>
               <span>P{subtotal.toFixed(2)}</span>
+            </div>
+            <div className="totals-row" style={{ color: '#e67e00' }}>
+              <span>VAT (14%):</span>
+              <span>P{vatAmount.toFixed(2)}</span>
             </div>
             {appliedDiscount && (
               <div className="totals-row discount">
@@ -210,7 +229,7 @@ function Checkout() {
               </div>
             )}
             <div className="totals-row total">
-              <strong>TOTAL:</strong>
+              <strong>TOTAL (incl. VAT):</strong>
               <strong>P{total.toFixed(2)}</strong>
             </div>
           </div>
@@ -252,6 +271,7 @@ function Checkout() {
         <ReceiptPreview
           items={items}
           subtotal={subtotal}
+          vatAmount={vatAmount}
           discountAmount={discountAmount}
           appliedDiscount={appliedDiscount}
           total={total}

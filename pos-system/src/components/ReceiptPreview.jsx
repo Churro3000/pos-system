@@ -1,6 +1,8 @@
 import { useState } from 'react'
 
-function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, total, onClose, onConfirm }) {
+const VAT_RATE = 0.14
+
+function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDiscount, total, onClose, onConfirm }) {
   const [editableItems, setEditableItems] = useState(items.map(i => ({ ...i })))
   const [storeName, setStoreName] = useState('MY SHOP')
   const [storeAddress, setStoreAddress] = useState('123 Main Street, City')
@@ -20,23 +22,28 @@ function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, tota
     return editableItems.reduce((sum, i) => sum + (parseFloat(i.selling_price) * parseInt(i.qty)), 0)
   }
 
+  function getEditableVAT() {
+    return getEditableSubtotal() * VAT_RATE
+  }
+
   function getEditableDiscount() {
     if (!appliedDiscount) return discountAmount
+    const subtotalWithVAT = getEditableSubtotal() + getEditableVAT()
     if (appliedDiscount.type === 'percent') {
-      return (getEditableSubtotal() * appliedDiscount.value) / 100
+      return (subtotalWithVAT * appliedDiscount.value) / 100
     }
     return appliedDiscount.value
   }
 
   function getEditableTotal() {
-    return getEditableSubtotal() - getEditableDiscount()
-  }
-
-  function handlePrint() {
-    window.print()
+    return getEditableSubtotal() + getEditableVAT() - getEditableDiscount()
   }
 
   const now = new Date()
+  const editableSubtotal = getEditableSubtotal()
+  const editableVAT = getEditableVAT()
+  const editableDiscount = getEditableDiscount()
+  const editableTotal = getEditableTotal()
 
   return (
     <div className="receipt-overlay">
@@ -44,9 +51,9 @@ function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, tota
 
         <div className="receipt-actions no-print">
           <h2>🧾 Receipt Preview</h2>
-          <p className="hint">Click the ✏️ pencil icon on any field to edit it before printing.</p>
+          <p className="hint">Click ✏️ to edit any field before printing.</p>
           <div className="receipt-action-buttons">
-            <button className="btn-primary" onClick={handlePrint}>🖨️ Print Receipt</button>
+            <button className="btn-primary" onClick={() => window.print()}>🖨️ Print Receipt</button>
             <button className="btn-secondary" onClick={() => onConfirm(editableItems)}>✅ Confirm Sale</button>
             <button className="btn-danger" onClick={onClose}>✕ Cancel</button>
           </div>
@@ -60,6 +67,7 @@ function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, tota
               alt="Store Logo"
               className="store-logo"
             />
+
             {editingField === 'storeName' ? (
               <input
                 autoFocus
@@ -139,6 +147,9 @@ function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, tota
                     ) : (
                       <span>
                         {item.name}
+                        {item.serial_number && (
+                          <div style={{ fontSize: '0.7rem', color: '#888' }}>S/N: {item.serial_number}</div>
+                        )}
                         <button className="pencil-btn no-print" onClick={() => setEditingField(`name-${index}`)}>✏️</button>
                       </span>
                     )}
@@ -171,23 +182,28 @@ function ReceiptPreview({ items, subtotal, discountAmount, appliedDiscount, tota
 
           <div className="receipt-totals">
             <div className="totals-row">
-              <span>Subtotal:</span>
-              <span>P{getEditableSubtotal().toFixed(2)}</span>
+              <span>Subtotal (excl. VAT):</span>
+              <span>P{editableSubtotal.toFixed(2)}</span>
             </div>
-            {getEditableDiscount() > 0 && (
+            <div className="totals-row" style={{ color: '#e67e00' }}>
+              <span>VAT (14%):</span>
+              <span>P{editableVAT.toFixed(2)}</span>
+            </div>
+            {editableDiscount > 0 && (
               <div className="totals-row discount">
                 <span>Discount{appliedDiscount ? ` (${appliedDiscount.code})` : ''}:</span>
-                <span>- P{getEditableDiscount().toFixed(2)}</span>
+                <span>- P{editableDiscount.toFixed(2)}</span>
               </div>
             )}
             <div className="totals-row total">
-              <strong>TOTAL:</strong>
-              <strong>P{getEditableTotal().toFixed(2)}</strong>
+              <strong>TOTAL (incl. VAT):</strong>
+              <strong>P{editableTotal.toFixed(2)}</strong>
             </div>
           </div>
 
           <div className="receipt-footer">
             <hr />
+            <p>VAT Reg No: 00000000</p>
             <p>Thank you for your purchase!</p>
             <p>Please come again 😊</p>
           </div>

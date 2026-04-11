@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getProducts, saveProduct } from '../lib/supabase'
+import { getProducts, saveProduct, supabase } from '../lib/supabase'
 
 function Inventory() {
   const [barcode, setBarcode] = useState('')
@@ -12,6 +12,8 @@ function Inventory() {
   const [messageType, setMessageType] = useState('success')
   const [products, setProducts] = useState([])
   const [search, setSearch] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [editData, setEditData] = useState({})
   const barcodeRef = useRef(null)
 
   useEffect(() => {
@@ -63,6 +65,55 @@ function Inventory() {
       setLowStockAlert('5')
       fetchProducts()
       barcodeRef.current.focus()
+    }
+  }
+
+  function startEdit(product) {
+    setEditingId(product.id)
+    setEditData({
+      name: product.name,
+      barcode: product.barcode,
+      cost_price: product.cost_price,
+      selling_price: product.selling_price,
+      stock: product.stock,
+      low_stock_alert: product.low_stock_alert,
+    })
+  }
+
+  async function saveEdit(id) {
+    const { error } = await supabase
+      .from('products')
+      .update({
+        name: editData.name,
+        barcode: editData.barcode,
+        cost_price: parseFloat(editData.cost_price),
+        selling_price: parseFloat(editData.selling_price),
+        stock: parseInt(editData.stock),
+        low_stock_alert: parseInt(editData.low_stock_alert),
+      })
+      .eq('id', id)
+
+    if (error) {
+      setMessage('Error updating product: ' + error.message)
+      setMessageType('error')
+    } else {
+      setMessage('✅ Product updated!')
+      setMessageType('success')
+      setEditingId(null)
+      fetchProducts()
+    }
+  }
+
+  async function deleteProduct(id, name) {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) {
+      setMessage('Error deleting product: ' + error.message)
+      setMessageType('error')
+    } else {
+      setMessage(`✅ "${name}" deleted!`)
+      setMessageType('success')
+      fetchProducts()
     }
   }
 
@@ -168,20 +219,87 @@ function Inventory() {
             <th>Price</th>
             <th>Margin</th>
             <th>Stock</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {filtered.map(p => {
             const m = (((p.selling_price - p.cost_price) / p.selling_price) * 100).toFixed(1)
             const lowStock = p.stock <= p.low_stock_alert
+            const isEditing = editingId === p.id
+
             return (
-              <tr key={p.id} className={lowStock ? 'low-stock-row' : ''}>
-                <td>{p.barcode}</td>
-                <td>{p.name}</td>
-                <td>P{parseFloat(p.cost_price).toFixed(2)}</td>
-                <td>P{parseFloat(p.selling_price).toFixed(2)}</td>
-                <td><span className={`margin-badge small ${m >= 30 ? 'good' : m >= 10 ? 'ok' : 'low'}`}>{m}%</span></td>
-                <td className={lowStock ? 'low-stock-text' : ''}>{p.stock} {lowStock ? '⚠️' : ''}</td>
+              <tr key={p.id} className={lowStock && !isEditing ? 'low-stock-row' : ''}>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="edit-input"
+                      value={editData.barcode}
+                      onChange={e => setEditData({ ...editData, barcode: e.target.value })}
+                    />
+                  ) : p.barcode}
+                </td>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="edit-input"
+                      value={editData.name}
+                      onChange={e => setEditData({ ...editData, name: e.target.value })}
+                    />
+                  ) : p.name}
+                </td>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="edit-input small"
+                      type="number"
+                      value={editData.cost_price}
+                      onChange={e => setEditData({ ...editData, cost_price: e.target.value })}
+                    />
+                  ) : `P${parseFloat(p.cost_price).toFixed(2)}`}
+                </td>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="edit-input small"
+                      type="number"
+                      value={editData.selling_price}
+                      onChange={e => setEditData({ ...editData, selling_price: e.target.value })}
+                    />
+                  ) : `P${parseFloat(p.selling_price).toFixed(2)}`}
+                </td>
+                <td>
+                  <span className={`margin-badge small ${m >= 30 ? 'good' : m >= 10 ? 'ok' : 'low'}`}>
+                    {m}%
+                  </span>
+                </td>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="edit-input small"
+                      type="number"
+                      value={editData.stock}
+                      onChange={e => setEditData({ ...editData, stock: e.target.value })}
+                    />
+                  ) : (
+                    <span className={lowStock ? 'low-stock-text' : ''}>
+                      {p.stock} {lowStock ? '⚠️' : ''}
+                    </span>
+                  )}
+                </td>
+                <td>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button className="btn-primary btn-small" onClick={() => saveEdit(p.id)}>💾</button>
+                      <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button className="btn-small" onClick={() => startEdit(p)}>✏️</button>
+                      <button className="remove-btn" onClick={() => deleteProduct(p.id, p.name)}>🗑️</button>
+                    </div>
+                  )}
+                </td>
               </tr>
             )
           })}
