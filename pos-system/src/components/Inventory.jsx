@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { getProducts, saveProduct, getSuppliers, getPurchases, supabase } from '../lib/supabase'
+import { useState, useEffect } from 'react'
+import { getProducts, getSuppliers, getPurchases, supabase } from '../lib/supabase'
 
 function Inventory() {
   const [products, setProducts] = useState([])
@@ -25,36 +25,26 @@ function Inventory() {
   }
 
   function getSupplierProducts(supplierName) {
-  const supplierPurchases = purchases.filter(p => p.supplier_name === supplierName)
-  const result = []
-  supplierPurchases.forEach(purchase => {
-    purchase.items.forEach(item => {
-      const liveProduct = products.find(p => p.barcode === item.barcode)
-      result.push({
-        ...item,
-        stock: liveProduct ? liveProduct.stock : item.quantity,
-        selling_price: liveProduct ? liveProduct.selling_price : item.selling_price,
-        cost_price: liveProduct ? liveProduct.cost_price : item.cost_price,
-        live_id: liveProduct ? liveProduct.id : null,
-        purchase_date: purchase.created_at,
-        invoice_number: purchase.invoice_number,
-        purchase_id: purchase.id,
+    const supplierPurchases = purchases.filter(p => p.supplier_name === supplierName)
+    const result = []
+    supplierPurchases.forEach(purchase => {
+      purchase.items.forEach(item => {
+        const liveProduct = products.find(p => p.barcode === item.barcode)
+        result.push({
+          ...item,
+          stock: liveProduct ? liveProduct.stock : item.quantity,
+          selling_price: liveProduct ? liveProduct.selling_price : item.selling_price,
+          cost_price: liveProduct ? liveProduct.cost_price : item.cost_price,
+          name: liveProduct ? liveProduct.name : item.name,
+          live_id: liveProduct ? liveProduct.id : null,
+          low_stock_alert: liveProduct ? liveProduct.low_stock_alert : 5,
+          purchase_date: purchase.created_at,
+          invoice_number: purchase.invoice_number,
+          purchase_id: purchase.id,
+        })
       })
     })
-  })
-  return result
-}
-
-  function startEdit(product) {
-    setEditingId(product.id)
-    setEditData({
-      name: product.name,
-      barcode: product.barcode,
-      cost_price: product.cost_price,
-      selling_price: product.selling_price,
-      stock: product.stock,
-      low_stock_alert: product.low_stock_alert,
-    })
+    return result
   }
 
   async function saveEdit(id) {
@@ -66,7 +56,7 @@ function Inventory() {
         cost_price: parseFloat(editData.cost_price),
         selling_price: parseFloat(editData.selling_price),
         stock: parseInt(editData.stock),
-        low_stock_alert: parseInt(editData.low_stock_alert),
+        low_stock_alert: parseInt(editData.low_stock_alert || 5),
       })
       .eq('id', id)
 
@@ -240,7 +230,17 @@ function Inventory() {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '4px' }}>
-                          <button className="btn-small" onClick={() => startEdit(p)}>✏️</button>
+                          <button className="btn-small" onClick={() => {
+                            setEditingId(p.id)
+                            setEditData({
+                              name: p.name,
+                              barcode: p.barcode,
+                              cost_price: p.cost_price,
+                              selling_price: p.selling_price,
+                              stock: p.stock,
+                              low_stock_alert: p.low_stock_alert,
+                            })
+                          }}>✏️</button>
                           <button className="remove-btn" onClick={() => deleteProduct(p.id, p.name)}>🗑️</button>
                         </div>
                       )}
@@ -328,34 +328,104 @@ function Inventory() {
                   <th>Barcode</th>
                   <th>Cost</th>
                   <th>Selling</th>
-                  <th>Qty</th>
+                  <th>Stock</th>
                   <th>VAT</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {supplierProducts.map((item, i) => (
-                  <tr key={i}>
-                    <td>{new Date(item.purchase_date).toLocaleDateString()}</td>
-                    <td>{item.invoice_number || '—'}</td>
-                    <td>
-                      {item.name}
-                      {item.has_serial && item.serial_number && (
-                        <div style={{ fontSize: '0.75rem', color: '#888' }}>
-                          S/N: {item.serial_number}
-                        </div>
-                      )}
-                    </td>
-                    <td>{item.barcode || '—'}</td>
-                    <td>P{parseFloat(item.cost_price).toFixed(2)}</td>
-                    <td>P{parseFloat(item.selling_price || 0).toFixed(2)}</td>
-                    <td>{item.quantity}</td>
-                    <td>
-                      <span className={`status-badge ${item.vat_included ? 'accepted' : 'pending'}`}>
-                        {item.vat_included ? 'Included' : 'Excluded'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {supplierProducts.map((item, i) => {
+                  const isEditing = editingId === `sup-${i}`
+                  return (
+                    <tr key={i}>
+                      <td>{new Date(item.purchase_date).toLocaleDateString()}</td>
+                      <td>{item.invoice_number || '—'}</td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            className="edit-input"
+                            value={editData.name}
+                            onChange={e => setEditData({ ...editData, name: e.target.value })}
+                          />
+                        ) : (
+                          <>
+                            {item.name}
+                            {item.has_serial && item.serial_number && (
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                                S/N: {item.serial_number}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td>{item.barcode || '—'}</td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            className="edit-input small"
+                            type="number"
+                            value={editData.cost_price}
+                            onChange={e => setEditData({ ...editData, cost_price: e.target.value })}
+                          />
+                        ) : `P${parseFloat(item.cost_price).toFixed(2)}`}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            className="edit-input small"
+                            type="number"
+                            value={editData.selling_price}
+                            onChange={e => setEditData({ ...editData, selling_price: e.target.value })}
+                          />
+                        ) : `P${parseFloat(item.selling_price).toFixed(2)}`}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            className="edit-input small"
+                            type="number"
+                            value={editData.stock}
+                            onChange={e => setEditData({ ...editData, stock: e.target.value })}
+                          />
+                        ) : (
+                          <span className={item.stock <= item.low_stock_alert ? 'low-stock-text' : ''}>
+                            {item.stock} {item.stock <= item.low_stock_alert ? '⚠️' : ''}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`status-badge ${item.vat_included ? 'accepted' : 'pending'}`}>
+                          {item.vat_included ? 'Included' : 'Excluded'}
+                        </span>
+                      </td>
+                      <td>
+                        {item.live_id && (
+                          isEditing ? (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button className="btn-primary btn-small" onClick={() => saveEdit(item.live_id)}>💾</button>
+                              <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>✕</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button className="btn-small" onClick={() => {
+                                setEditingId(`sup-${i}`)
+                                setEditData({
+                                  name: item.name,
+                                  barcode: item.barcode,
+                                  cost_price: item.cost_price,
+                                  selling_price: item.selling_price,
+                                  stock: item.stock,
+                                  low_stock_alert: item.low_stock_alert,
+                                })
+                              }}>✏️</button>
+                              <button className="remove-btn" onClick={() => deleteProduct(item.live_id, item.name)}>🗑️</button>
+                            </div>
+                          )
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
