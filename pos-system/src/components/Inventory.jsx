@@ -25,20 +25,25 @@ function Inventory() {
   }
 
   function getSupplierProducts(supplierName) {
-    const supplierPurchases = purchases.filter(p => p.supplier_name === supplierName)
-    const result = []
-    supplierPurchases.forEach(purchase => {
-      purchase.items.forEach(item => {
-        result.push({
-          ...item,
-          purchase_date: purchase.created_at,
-          invoice_number: purchase.invoice_number,
-          purchase_id: purchase.id,
-        })
+  const supplierPurchases = purchases.filter(p => p.supplier_name === supplierName)
+  const result = []
+  supplierPurchases.forEach(purchase => {
+    purchase.items.forEach(item => {
+      const liveProduct = products.find(p => p.barcode === item.barcode)
+      result.push({
+        ...item,
+        stock: liveProduct ? liveProduct.stock : item.quantity,
+        selling_price: liveProduct ? liveProduct.selling_price : item.selling_price,
+        cost_price: liveProduct ? liveProduct.cost_price : item.cost_price,
+        live_id: liveProduct ? liveProduct.id : null,
+        purchase_date: purchase.created_at,
+        invoice_number: purchase.invoice_number,
+        purchase_id: purchase.id,
       })
     })
-    return result
-  }
+  })
+  return result
+}
 
   function startEdit(product) {
     setEditingId(product.id)

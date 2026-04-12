@@ -7,6 +7,7 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDis
   const [storeName, setStoreName] = useState('MY SHOP')
   const [storeAddress, setStoreAddress] = useState('123 Main Street, City')
   const [editingField, setEditingField] = useState(null)
+  const [printed, setPrinted] = useState(false)
 
   function updateItem(index, field, value) {
     const updated = [...editableItems]
@@ -39,6 +40,11 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDis
     return getEditableSubtotal() + getEditableVAT() - getEditableDiscount()
   }
 
+  function handlePrint() {
+    window.print()
+    setPrinted(true)
+  }
+
   const now = new Date()
   const editableSubtotal = getEditableSubtotal()
   const editableVAT = getEditableVAT()
@@ -51,16 +57,34 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDis
 
         <div className="receipt-actions no-print">
           <h2>🧾 Receipt Preview</h2>
-          <p className="hint">Click ✏️ to edit any field before printing.</p>
+          <p className="hint">
+            {!printed
+              ? 'Review and edit the receipt, then print it. Complete Sale only appears after printing.'
+              : '✅ Receipt printed! Click Complete Sale to finalize and update stock.'}
+          </p>
           <div className="receipt-action-buttons">
-            <button className="btn-primary" onClick={() => window.print()}>🖨️ Print Receipt</button>
-            <button className="btn-secondary" onClick={() => onConfirm(editableItems)}>✅ Confirm Sale</button>
+            <button className="btn-primary" onClick={handlePrint}>
+              🖨️ {printed ? 'Print Again' : 'Print Receipt'}
+            </button>
+            {printed && (
+              <button
+                className="btn-secondary"
+                style={{ background: '#f0fff4', color: '#2d8a4e', border: '2px solid #2d8a4e' }}
+                onClick={() => onConfirm(editableItems)}
+              >
+                ✅ Complete Sale
+              </button>
+            )}
             <button className="btn-danger" onClick={onClose}>✕ Cancel</button>
           </div>
+          {!printed && (
+            <p style={{ fontSize: '0.8rem', color: '#e67e00', marginTop: '8px' }}>
+              ⚠️ You must print the receipt before completing the sale.
+            </p>
+          )}
         </div>
 
         <div className="receipt-paper" id="receipt">
-
           <div className="receipt-header">
             <img
               src="https://placehold.co/80x80?text=LOGO"
@@ -148,7 +172,9 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDis
                       <span>
                         {item.name}
                         {item.serial_number && (
-                          <div style={{ fontSize: '0.7rem', color: '#888' }}>S/N: {item.serial_number}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#888' }}>
+                            S/N: {item.serial_number}
+                          </div>
                         )}
                         <button className="pencil-btn no-print" onClick={() => setEditingField(`name-${index}`)}>✏️</button>
                       </span>
@@ -207,7 +233,6 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, appliedDis
             <p>Thank you for your purchase!</p>
             <p>Please come again 😊</p>
           </div>
-
         </div>
       </div>
     </div>
