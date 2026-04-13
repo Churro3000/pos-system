@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getSales } from '../lib/supabase'
+import { TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
 
 function Sales() {
   const [sales, setSales] = useState([])
@@ -7,9 +8,7 @@ function Sales() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('today')
 
-  useEffect(() => {
-    fetchSales()
-  }, [])
+  useEffect(() => { fetchSales() }, [])
 
   async function fetchSales() {
     setLoading(true)
@@ -39,10 +38,11 @@ function Sales() {
   const filtered = filterSales()
   const totalRevenue = filtered.reduce((sum, s) => sum + s.total, 0)
   const totalProfit = filtered.reduce((sum, s) => sum + s.profit, 0)
+  const totalVAT = filtered.reduce((sum, s) => sum + (s.vat_amount || 0), 0)
 
   return (
     <div className="panel">
-      <h2>🧾 Sales History</h2>
+      <h2>Sales History</h2>
 
       <div className="stats-row">
         <div className="stat-card">
@@ -56,6 +56,10 @@ function Sales() {
         <div className="stat-card green">
           <span className="stat-label">Profit</span>
           <span className="stat-value">P{totalProfit.toFixed(2)}</span>
+        </div>
+        <div className="stat-card orange">
+          <span className="stat-label">VAT Collected</span>
+          <span className="stat-value">P{totalVAT.toFixed(2)}</span>
         </div>
       </div>
 
@@ -82,6 +86,7 @@ function Sales() {
               <th>Date & Time</th>
               <th>Items</th>
               <th>Subtotal</th>
+              <th>VAT</th>
               <th>Discount</th>
               <th>Total</th>
               <th>Profit</th>
@@ -91,10 +96,11 @@ function Sales() {
           <tbody>
             {filtered.map(sale => (
               <>
-                <tr key={sale.id} className="sale-row">
+                <tr key={sale.id}>
                   <td>{new Date(sale.created_at).toLocaleString()}</td>
                   <td>{sale.items.length} item{sale.items.length !== 1 ? 's' : ''}</td>
                   <td>P{parseFloat(sale.subtotal).toFixed(2)}</td>
+                  <td style={{ color: '#e67e00' }}>P{parseFloat(sale.vat_amount || 0).toFixed(2)}</td>
                   <td>{sale.discount_amount > 0 ? `- P${parseFloat(sale.discount_amount).toFixed(2)}` : '—'}</td>
                   <td><strong>P{parseFloat(sale.total).toFixed(2)}</strong></td>
                   <td className="profit-text">P{parseFloat(sale.profit).toFixed(2)}</td>
@@ -103,13 +109,15 @@ function Sales() {
                       className="btn-small"
                       onClick={() => setSelected(selected === sale.id ? null : sale.id)}
                     >
-                      {selected === sale.id ? 'Hide' : 'View'}
+                      {selected === sale.id
+                        ? <ChevronUp size={14} />
+                        : <ChevronDown size={14} />}
                     </button>
                   </td>
                 </tr>
                 {selected === sale.id && (
                   <tr key={sale.id + '-detail'}>
-                    <td colSpan="7" className="sale-detail">
+                    <td colSpan="8" className="sale-detail">
                       <table className="inner-table">
                         <thead>
                           <tr>
@@ -122,7 +130,14 @@ function Sales() {
                         <tbody>
                           {sale.items.map((item, i) => (
                             <tr key={i}>
-                              <td>{item.name}</td>
+                              <td>
+                                {item.name}
+                                {item.serial_number && (
+                                  <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                                    S/N: {item.serial_number}
+                                  </div>
+                                )}
+                              </td>
                               <td>{item.qty}</td>
                               <td>P{parseFloat(item.selling_price).toFixed(2)}</td>
                               <td>P{(item.selling_price * item.qty).toFixed(2)}</td>

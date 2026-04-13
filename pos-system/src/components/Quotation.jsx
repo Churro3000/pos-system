@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react'
-import { saveQuotation, getQuotations, updateQuotationStatus } from '../lib/supabase'
+import { saveQuotation, getQuotations } from '../lib/supabase'
+import { Plus, Trash2, Printer, Save, FileText } from 'lucide-react'
 
 const VAT_RATE = 0.14
 
 function emptyItem() {
-  return {
-    name: '',
-    quantity: '',
-    unit_price: '',
-    vat_included: true,
-  }
+  return { name: '', quantity: '', unit_price: '', vat_included: true }
 }
 
 function Quotation() {
@@ -24,9 +20,7 @@ function Quotation() {
   const [selected, setSelected] = useState(null)
   const [view, setView] = useState('new')
 
-  useEffect(() => {
-    fetchQuotations()
-  }, [])
+  useEffect(() => { fetchQuotations() }, [])
 
   async function fetchQuotations() {
     const data = await getQuotations()
@@ -39,9 +33,7 @@ function Quotation() {
     setItems(updated)
   }
 
-  function addItem() {
-    setItems([...items, emptyItem()])
-  }
+  function addItem() { setItems([...items, emptyItem()]) }
 
   function removeItem(index) {
     if (items.length === 1) return
@@ -51,28 +43,19 @@ function Quotation() {
   function getItemTotal(item) {
     const price = parseFloat(item.unit_price) || 0
     const qty = parseInt(item.quantity) || 1
-    if (item.vat_included) {
-      return price * qty
-    } else {
-      return price * qty * (1 + VAT_RATE)
-    }
+    return item.vat_included ? price * qty : price * qty * (1 + VAT_RATE)
   }
 
   function getItemVAT(item) {
     const price = parseFloat(item.unit_price) || 0
     const qty = parseInt(item.quantity) || 1
-    if (item.vat_included) {
-      return (price * qty * VAT_RATE) / (1 + VAT_RATE)
-    } else {
-      return price * qty * VAT_RATE
-    }
+    return item.vat_included
+      ? (price * qty * VAT_RATE) / (1 + VAT_RATE)
+      : price * qty * VAT_RATE
   }
 
   function getTotals() {
-    let subtotal = 0
-    let vatAmount = 0
-    let total = 0
-
+    let subtotal = 0, vatAmount = 0, total = 0
     items.forEach(item => {
       const price = parseFloat(item.unit_price) || 0
       const qty = parseInt(item.quantity) || 1
@@ -88,21 +71,18 @@ function Quotation() {
         total += price * qty + vat
       }
     })
-
     return { subtotal, vatAmount, total }
   }
 
   async function handleSave() {
     if (!customerName) {
-      setMessage('❌ Please enter customer name!')
+      setMessage('Please enter customer name!')
       setMessageType('error')
       return
     }
-
     for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      if (!item.name || !item.unit_price || !item.quantity) {
-        setMessage(`❌ Please fill in all fields for item ${i + 1}!`)
+      if (!items[i].name || !items[i].unit_price || !items[i].quantity) {
+        setMessage(`Please fill in all fields for item ${i + 1}!`)
         setMessageType('error')
         return
       }
@@ -110,8 +90,7 @@ function Quotation() {
 
     setSaving(true)
     const { subtotal, vatAmount, total } = getTotals()
-
-    const quotation = {
+    const error = await saveQuotation({
       customer_name: customerName,
       customer_contact: customerContact,
       valid_until: validUntil || null,
@@ -120,42 +99,35 @@ function Quotation() {
       vat_amount: vatAmount,
       total,
       status: 'pending',
-    }
+    })
 
-    const error = await saveQuotation(quotation)
     if (error) {
-      setMessage('❌ Error saving quotation: ' + error.message)
+      setMessage('Error saving quotation: ' + error.message)
       setMessageType('error')
-      setSaving(false)
-      return
+    } else {
+      setMessage('Quotation saved successfully!')
+      setMessageType('success')
+      setCustomerName('')
+      setCustomerContact('')
+      setValidUntil('')
+      setItems([emptyItem()])
+      fetchQuotations()
     }
-
-    setMessage('✅ Quotation saved successfully!')
-    setMessageType('success')
-    setCustomerName('')
-    setCustomerContact('')
-    setValidUntil('')
-    setItems([emptyItem()])
-    fetchQuotations()
     setSaving(false)
-  }
-
-  function handlePrint() {
-    window.print()
   }
 
   const { subtotal, vatAmount, total } = getTotals()
 
   return (
     <div className="panel">
-      <h2>📋 Quotations</h2>
+      <h2>Quotations</h2>
 
       <div className="filter-tabs">
         <button className={view === 'new' ? 'active' : ''} onClick={() => setView('new')}>
-          + New Quotation
+          <Plus size={15} /> New Quotation
         </button>
         <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
-          All Quotations ({quotations.length})
+          <FileText size={15} /> All Quotations ({quotations.length})
         </button>
       </div>
 
@@ -166,29 +138,18 @@ function Quotation() {
             <div className="form-grid">
               <div className="form-group full">
                 <label>Customer Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. John Doe"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                />
+                <input type="text" placeholder="e.g. John Doe" value={customerName}
+                  onChange={e => setCustomerName(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Contact Number</label>
-                <input
-                  type="text"
-                  placeholder="e.g. +267 71234567"
-                  value={customerContact}
-                  onChange={e => setCustomerContact(e.target.value)}
-                />
+                <input type="text" placeholder="+267 71234567" value={customerContact}
+                  onChange={e => setCustomerContact(e.target.value)} />
               </div>
               <div className="form-group">
                 <label>Valid Until</label>
-                <input
-                  type="date"
-                  value={validUntil}
-                  onChange={e => setValidUntil(e.target.value)}
-                />
+                <input type="date" value={validUntil}
+                  onChange={e => setValidUntil(e.target.value)} />
               </div>
             </div>
           </div>
@@ -196,7 +157,9 @@ function Quotation() {
           <div className="products-section">
             <div className="section-header">
               <h3>Items ({items.length})</h3>
-              <button className="btn-primary" onClick={addItem}>+ Add Item</button>
+              <button className="btn-primary" onClick={addItem}>
+                <Plus size={15} /> Add Item
+              </button>
             </div>
 
             {items.map((item, index) => (
@@ -204,37 +167,26 @@ function Quotation() {
                 <div className="purchase-product-header">
                   <span className="product-number">Item {index + 1}</span>
                   {items.length > 1 && (
-                    <button className="remove-btn" onClick={() => removeItem(index)}>🗑️ Remove</button>
+                    <button className="remove-btn" onClick={() => removeItem(index)}>
+                      <Trash2 size={14} /> Remove
+                    </button>
                   )}
                 </div>
-
                 <div className="form-grid">
                   <div className="form-group full">
                     <label>Item Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Office Chair"
-                      value={item.name}
-                      onChange={e => updateItem(index, 'name', e.target.value)}
-                    />
+                    <input type="text" placeholder="e.g. Office Chair" value={item.name}
+                      onChange={e => updateItem(index, 'name', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label>Unit Price (P) *</label>
-                    <input
-                      type="number"
-                      placeholder="Price per unit"
-                      value={item.unit_price}
-                      onChange={e => updateItem(index, 'unit_price', e.target.value)}
-                    />
+                    <input type="number" placeholder="Price per unit" value={item.unit_price}
+                      onChange={e => updateItem(index, 'unit_price', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label>Quantity *</label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 2"
-                      value={item.quantity}
-                      onChange={e => updateItem(index, 'quantity', e.target.value)}
-                    />
+                    <input type="number" placeholder="e.g. 2" value={item.quantity}
+                      onChange={e => updateItem(index, 'quantity', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label>Line Total</label>
@@ -244,14 +196,10 @@ function Quotation() {
                     </div>
                   </div>
                 </div>
-
                 <div className="product-checkboxes">
                   <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={item.vat_included}
-                      onChange={e => updateItem(index, 'vat_included', e.target.checked)}
-                    />
+                    <input type="checkbox" checked={item.vat_included}
+                      onChange={e => updateItem(index, 'vat_included', e.target.checked)} />
                     <span>VAT Included in price (14%)</span>
                     <span className="checkbox-hint">
                       {item.vat_included ? 'Price already includes VAT' : 'VAT will be added on top (+14%)'}
@@ -268,7 +216,7 @@ function Quotation() {
               <span>Subtotal (excl. VAT):</span>
               <span>P{subtotal.toFixed(2)}</span>
             </div>
-            <div className="totals-row">
+            <div className="totals-row" style={{ color: '#e67e00' }}>
               <span>VAT (14%):</span>
               <span>P{vatAmount.toFixed(2)}</span>
             </div>
@@ -281,15 +229,11 @@ function Quotation() {
           {message && <p className={`message ${messageType}`}>{message}</p>}
 
           <div className="actions">
-            <button
-              className="btn-primary"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : '💾 Save Quotation'}
+            <button className="btn-primary" onClick={handleSave} disabled={saving}>
+              <Save size={16} /> {saving ? 'Saving...' : 'Save Quotation'}
             </button>
-            <button className="btn-secondary" onClick={handlePrint}>
-              🖨️ Print Quotation
+            <button className="btn-secondary" onClick={() => window.print()}>
+              <Printer size={16} /> Print Quotation
             </button>
           </div>
         </>
@@ -322,15 +266,11 @@ function Quotation() {
                       <td>{q.valid_until || '—'}</td>
                       <td><strong>P{parseFloat(q.total).toFixed(2)}</strong></td>
                       <td>
-                        <span className={`status-badge ${q.status}`}>
-                          {q.status}
-                        </span>
+                        <span className={`status-badge ${q.status}`}>{q.status}</span>
                       </td>
                       <td>
-                        <button
-                          className="btn-small"
-                          onClick={() => setSelected(selected === q.id ? null : q.id)}
-                        >
+                        <button className="btn-small"
+                          onClick={() => setSelected(selected === q.id ? null : q.id)}>
                           {selected === q.id ? 'Hide' : 'View'}
                         </button>
                       </td>

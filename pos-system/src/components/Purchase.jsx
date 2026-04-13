@@ -1,18 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers } from '../lib/supabase'
+import { Printer, Save, Plus, Trash2 } from 'lucide-react'
 
 const VAT_RATE = 0.14
 
-function emptyProduct() {
+function emptyRow() {
   return {
-    barcode: '',
-    name: '',
-    cost_price: '',
-    selling_price: '',
+    code: '',
+    description: '',
     quantity: '',
+    price: '',
+    discount: '',
     vat_included: true,
-    has_serial: false,
-    serial_number: '',
   }
 }
 
@@ -21,18 +20,19 @@ function Purchase() {
   const [supplierContact, setSupplierContact] = useState('')
   const [supplierEmail, setSupplierEmail] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
-  const [products, setProducts] = useState([emptyProduct()])
+  const [rows, setRows] = useState([emptyRow(), emptyRow(), emptyRow()])
+  const [pendingPayment, setPendingPayment] = useState(false)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
   const [saving, setSaving] = useState(false)
   const [suppliers, setSuppliers] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [filteredSuppliers, setFilteredSuppliers] = useState([])
+  const [editingCell, setEditingCell] = useState(null)
 
-  useEffect(() => {
-    fetchSuppliers()
-  }, [])
+  useEffect(() => { fetchSuppliers() }, [])
 
   async function fetchSuppliers() {
     const data = await getSuppliers()
@@ -61,91 +61,77 @@ function Purchase() {
     setShowSuggestions(false)
   }
 
-  function updateProduct(index, field, value) {
-    const updated = [...products]
+  function updateRow(index, field, value) {
+    const updated = [...rows]
     updated[index] = { ...updated[index], [field]: value }
-    setProducts(updated)
+    setRows(updated)
   }
 
-  function addProduct() {
-    setProducts([...products, emptyProduct()])
+  function addRow() {
+    setRows([...rows, emptyRow()])
   }
 
-  function removeProduct(index) {
-    if (products.length === 1) return
-    setProducts(products.filter((_, i) => i !== index))
+  function removeRow(index) {
+    if (rows.length === 1) return
+    setRows(rows.filter((_, i) => i !== index))
   }
 
-  function getProductCost(p) {
-    const cost = parseFloat(p.cost_price) || 0
-    const qty = parseInt(p.quantity) || 1
-    if (p.vat_included) {
-      return cost * qty
-    } else {
-      return cost * qty * (1 + VAT_RATE)
+  function getLineTotal(row) {
+    const price = parseFloat(row.price) || 0
+    const qty = parseFloat(row.quantity) || 0
+    const discount = parseFloat(row.discount) || 0
+    const gross = price * qty
+    const discounted = gross - (gross * discount / 100)
+    return discounted
+  }
+
+  function getLineVAT(row) {
+    const total = getLineTotal(row)
+    if (row.vat_included) {
+      return (total * VAT_RATE) / (1 + VAT_RATE)
     }
+    return total * VAT_RATE
   }
 
-  function getProductVAT(p) {
-    const cost = parseFloat(p.cost_price) || 0
-    const qty = parseInt(p.quantity) || 1
-    if (p.vat_included) {
-      return (cost * qty * VAT_RATE) / (1 + VAT_RATE)
-    } else {
-      return cost * qty * VAT_RATE
-    }
+  function getLineTotalWithVAT(row) {
+    const total = getLineTotal(row)
+    if (row.vat_included) return total
+    return total * (1 + VAT_RATE)
   }
 
-  function getTotals() {
-    let totalExVat = 0
-    let totalVat = 0
-    let totalIncVat = 0
-
-    products.forEach(p => {
-      const cost = parseFloat(p.cost_price) || 0
-      const qty = parseInt(p.quantity) || 1
-      if (p.vat_included) {
-        const excl = (cost * qty) / (1 + VAT_RATE)
-        const vat = cost * qty - excl
-        totalExVat += excl
-        totalVat += vat
-        totalIncVat += cost * qty
-      } else {
-        const vat = cost * qty * VAT_RATE
-        totalExVat += cost * qty
-        totalVat += vat
-        totalIncVat += cost * qty + vat
-      }
-    })
-
-    return { totalExVat, totalVat, totalIncVat }
+  function getSummary() {
+    const activeRows = rows.filter(r => r.description && r.price && r.quantity)
+    const lineDiscountTotal = activeRows.reduce((sum, r) => {
+      const gross = (parseFloat(r.price) || 0) * (parseFloat(r.quantity) || 0)
+      return sum + (gross * (parseFloat(r.discount) || 0) / 100)
+    }, 0)
+    const totalExclusive = activeRows.reduce((sum, r) => {
+      const total = getLineTotal(r)
+      return sum + (r.vat_included ? total / (1 + VAT_RATE) : total)
+    }, 0)
+    const totalVAT = activeRows.reduce((sum, r) => sum + getLineVAT(r), 0)
+    const total = totalExclusive + totalVAT
+    return { lineDiscountTotal, totalExclusive, totalVAT, total }
   }
 
   async function handleSave() {
     if (!supplierName) {
-      setMessage('❌ Please enter supplier name!')
+      setMessage('Please enter supplier name!')
       setMessageType('error')
       return
     }
 
-    for (let i = 0; i < products.length; i++) {
-      const p = products[i]
-      if (!p.name || !p.cost_price || !p.quantity) {
-        setMessage(`❌ Please fill in all fields for product ${i + 1}!`)
-        setMessageType('error')
-        return
-      }
+    const activeRows = rows.filter(r => r.description && r.price && r.quantity)
+    if (activeRows.length === 0) {
+      setMessage('Please add at least one product!')
+      setMessageType('error')
+      return
     }
 
     setSaving(true)
-    const { totalExVat, totalVat, totalIncVat } = getTotals()
+    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
 
-    // Save or update supplier
-    await saveSupplier({
-      name: supplierName,
-      contact: supplierContact,
-      email: supplierEmail,
-    })
+    await saveSupplier({ name: supplierName, contact: supplierContact, email: supplierEmail })
 
     const purchase = {
       supplier_name: supplierName,
@@ -153,273 +139,346 @@ function Purchase() {
       supplier_email: supplierEmail,
       invoice_number: invoiceNumber,
       notes,
-      items: products,
-      total_excluding_vat: totalExVat,
-      total_vat: totalVat,
-      total_including_vat: totalIncVat,
+      pending_payment: pendingPayment,
+      discount_total: lineDiscountTotal,
+      items: activeRows.map(r => ({
+        barcode: r.code,
+        name: r.description,
+        quantity: parseFloat(r.quantity) || 0,
+        cost_price: parseFloat(r.price) || 0,
+        selling_price: 0,
+        vat_included: r.vat_included,
+        discount: parseFloat(r.discount) || 0,
+        line_total: getLineTotalWithVAT(r),
+      })),
+      total_excluding_vat: totalExclusive,
+      total_vat: totalVAT,
+      total_including_vat: total,
     }
 
     const error = await savePurchase(purchase)
     if (error) {
-      setMessage('❌ Error saving purchase: ' + error.message)
+      setMessage('Error saving purchase: ' + error.message)
       setMessageType('error')
       setSaving(false)
       return
     }
 
-    // Add products to inventory
+    // Add to inventory
     const existingProducts = await getProducts()
-    for (const p of products) {
-      const existing = existingProducts.find(e => e.barcode === p.barcode)
+    for (const r of activeRows) {
+      if (!r.description) continue
+      const existing = existingProducts.find(e => e.barcode === r.code)
       const newStock = existing
-        ? existing.stock + parseInt(p.quantity)
-        : parseInt(p.quantity)
+        ? existing.stock + (parseFloat(r.quantity) || 0)
+        : parseFloat(r.quantity) || 0
       await saveProduct({
-        barcode: p.barcode || `GEN-${Date.now()}-${Math.random()}`,
-        name: p.name,
-        cost_price: parseFloat(p.cost_price),
-        selling_price: parseFloat(p.selling_price) || parseFloat(p.cost_price) * 1.3,
+        barcode: r.code || `GEN-${Date.now()}-${Math.random()}`,
+        name: r.description,
+        cost_price: parseFloat(r.price) || 0,
+        selling_price: existing ? existing.selling_price : parseFloat(r.price) * 1.3,
         stock: newStock,
-        serial_number: p.has_serial ? p.serial_number : null,
         low_stock_alert: 5,
       })
     }
 
-    setMessage('✅ Purchase saved and products added to inventory!')
+    setMessage('Purchase invoice saved!')
     setMessageType('success')
     setSupplierName('')
     setSupplierContact('')
     setSupplierEmail('')
     setInvoiceNumber('')
     setNotes('')
-    setProducts([emptyProduct()])
+    setPendingPayment(false)
+    setRows([emptyRow(), emptyRow(), emptyRow()])
     fetchSuppliers()
     setSaving(false)
   }
 
-  const { totalExVat, totalVat, totalIncVat } = getTotals()
+  function handlePrint() {
+    window.print()
+  }
+
+  const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+  const activeRows = rows.filter(r => r.description || r.price || r.quantity || r.code)
 
   return (
-    <div className="panel">
-      <h2>🧾 Purchase / Invoice</h2>
-      <p className="hint">Enter supplier details and products from the invoice.</p>
+    <div className="purchase-page">
 
-      {/* Supplier Details */}
-      <div className="supplier-section">
-        <h3>Supplier Details</h3>
-        <div className="form-grid">
-          <div className="form-group full" style={{ position: 'relative' }}>
-            <label>Supplier Name *</label>
+      {/* ACTION BUTTONS - hidden on print */}
+      <div className="purchase-actions no-print">
+        <div className="purchase-actions-left">
+          <h2>Purchase Invoice</h2>
+        </div>
+        <div className="purchase-actions-right">
+          <label className="checkbox-label pending-checkbox">
             <input
-              type="text"
-              placeholder="Type or select supplier..."
-              value={supplierName}
-              onChange={e => handleSupplierInput(e.target.value)}
-              onFocus={() => {
-                if (supplierName.length > 0) setShowSuggestions(true)
-              }}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              autoComplete="off"
+              type="checkbox"
+              checked={pendingPayment}
+              onChange={e => setPendingPayment(e.target.checked)}
             />
-            {showSuggestions && filteredSuppliers.length > 0 && (
-              <div className="autocomplete-dropdown">
-                {filteredSuppliers.map(s => (
-                  <div
-                    key={s.id}
-                    className="autocomplete-item"
-                    onMouseDown={() => selectSupplier(s)}
-                  >
-                    <span className="autocomplete-name">{s.name}</span>
-                    {s.contact && (
-                      <span className="autocomplete-sub">{s.contact}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            {showSuggestions && filteredSuppliers.length === 0 && supplierName && (
-              <div className="autocomplete-dropdown">
-                <div className="autocomplete-item new">
-                  ✨ New supplier: <strong>{supplierName}</strong>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label>Contact Number</label>
-            <input
-              type="text"
-              placeholder="e.g. +267 71234567"
-              value={supplierContact}
-              onChange={e => setSupplierContact(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              placeholder="supplier@email.com"
-              value={supplierEmail}
-              onChange={e => setSupplierEmail(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Invoice Number</label>
-            <input
-              type="text"
-              placeholder="e.g. INV-001"
-              value={invoiceNumber}
-              onChange={e => setInvoiceNumber(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Notes</label>
-            <input
-              type="text"
-              placeholder="Any notes..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-            />
-          </div>
+            <span>Pending Payment</span>
+          </label>
+          <button className="btn-secondary" onClick={handlePrint}>
+            <Printer size={15} /> Print / PDF
+          </button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Invoice'}
+          </button>
         </div>
       </div>
 
-      {/* Products */}
-      <div className="products-section">
-        <div className="section-header">
-          <h3>Products ({products.length})</h3>
-          <button className="btn-primary" onClick={addProduct}>+ Add Product</button>
-        </div>
+      {message && <p className={`message ${messageType} no-print`}>{message}</p>}
 
-        {products.map((p, index) => (
-          <div key={index} className="purchase-product-card">
-            <div className="purchase-product-header">
-              <span className="product-number">Product {index + 1}</span>
-              {products.length > 1 && (
-                <button className="remove-btn" onClick={() => removeProduct(index)}>🗑️ Remove</button>
-              )}
-            </div>
+      {/* A4 INVOICE */}
+      <div className="a4-invoice" id="invoice">
 
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Barcode</label>
-                <input
-                  type="text"
-                  placeholder="Scan or type"
-                  value={p.barcode}
-                  onChange={e => updateProduct(index, 'barcode', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>Product Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Coca Cola 500ml"
-                  value={p.name}
-                  onChange={e => updateProduct(index, 'name', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>Cost Price (P) *</label>
-                <input
-                  type="number"
-                  placeholder="Purchase price"
-                  value={p.cost_price}
-                  onChange={e => updateProduct(index, 'cost_price', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>Selling Price (P)</label>
-                <input
-                  type="number"
-                  placeholder="Your selling price"
-                  value={p.selling_price}
-                  onChange={e => updateProduct(index, 'selling_price', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>Quantity *</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 10"
-                  value={p.quantity}
-                  onChange={e => updateProduct(index, 'quantity', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>Line Total</label>
-                <div className="line-total">
-                  P{getProductCost(p).toFixed(2)}
-                  <span className="vat-note">
-                    (VAT: P{getProductVAT(p).toFixed(2)})
-                  </span>
+        {/* Invoice Header */}
+        <div className="invoice-top">
+          <div className="invoice-supplier">
+            <h1 className="invoice-title">PURCHASE INVOICE</h1>
+            <div
+              className="invoice-field"
+              onDoubleClick={() => setEditingCell('supplierName')}
+            >
+              {editingCell === 'supplierName' ? (
+                <div style={{ position: 'relative' }}>
+                  <input
+                    autoFocus
+                    className="invoice-input"
+                    placeholder="Supplier Name *"
+                    value={supplierName}
+                    onChange={e => handleSupplierInput(e.target.value)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowSuggestions(false)
+                        setEditingCell(null)
+                      }, 150)
+                    }}
+                  />
+                  {showSuggestions && filteredSuppliers.length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {filteredSuppliers.map(s => (
+                        <div key={s.id} className="autocomplete-item"
+                          onMouseDown={() => selectSupplier(s)}>
+                          <span className="autocomplete-name">{s.name}</span>
+                          {s.contact && <span className="autocomplete-sub">{s.contact}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-
-            <div className="product-checkboxes">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={p.vat_included}
-                  onChange={e => updateProduct(index, 'vat_included', e.target.checked)}
-                />
-                <span>VAT Included in price (14%)</span>
-                <span className="checkbox-hint">
-                  {p.vat_included ? 'Price already includes VAT' : 'VAT will be added on top (+14%)'}
+              ) : (
+                <span className={`invoice-value bold ${!supplierName ? 'placeholder' : ''}`}>
+                  {supplierName || 'Double-click to enter supplier name'}
                 </span>
-              </label>
+              )}
+            </div>
 
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={p.has_serial}
-                  onChange={e => updateProduct(index, 'has_serial', e.target.checked)}
-                />
-                <span>Has Serial Number</span>
-              </label>
+            <div className="invoice-field" onDoubleClick={() => setEditingCell('supplierContact')}>
+              {editingCell === 'supplierContact' ? (
+                <input autoFocus className="invoice-input" placeholder="Contact number"
+                  value={supplierContact}
+                  onChange={e => setSupplierContact(e.target.value)}
+                  onBlur={() => setEditingCell(null)} />
+              ) : (
+                <span className={`invoice-value ${!supplierContact ? 'placeholder' : ''}`}>
+                  {supplierContact || 'Double-click to enter contact'}
+                </span>
+              )}
+            </div>
 
-              {p.has_serial && (
-                <input
-                  type="text"
-                  placeholder="Enter serial number"
-                  value={p.serial_number}
-                  onChange={e => updateProduct(index, 'serial_number', e.target.value)}
-                  className="serial-input"
-                />
+            <div className="invoice-field" onDoubleClick={() => setEditingCell('supplierEmail')}>
+              {editingCell === 'supplierEmail' ? (
+                <input autoFocus className="invoice-input" placeholder="Email address"
+                  value={supplierEmail}
+                  onChange={e => setSupplierEmail(e.target.value)}
+                  onBlur={() => setEditingCell(null)} />
+              ) : (
+                <span className={`invoice-value ${!supplierEmail ? 'placeholder' : ''}`}>
+                  {supplierEmail || 'Double-click to enter email'}
+                </span>
               )}
             </div>
           </div>
-        ))}
+
+          <div className="invoice-meta">
+            <div className="invoice-meta-row">
+              <span className="invoice-meta-label">Invoice No:</span>
+              <div className="invoice-field" onDoubleClick={() => setEditingCell('invoiceNumber')}>
+                {editingCell === 'invoiceNumber' ? (
+                  <input autoFocus className="invoice-input"
+                    placeholder="INV-001"
+                    value={invoiceNumber}
+                    onChange={e => setInvoiceNumber(e.target.value)}
+                    onBlur={() => setEditingCell(null)} />
+                ) : (
+                  <span className={`invoice-value ${!invoiceNumber ? 'placeholder' : ''}`}>
+                    {invoiceNumber || 'INV-001'}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="invoice-meta-row">
+              <span className="invoice-meta-label">Date:</span>
+              <div className="invoice-field" onDoubleClick={() => setEditingCell('invoiceDate')}>
+                {editingCell === 'invoiceDate' ? (
+                  <input autoFocus className="invoice-input" type="date"
+                    value={invoiceDate}
+                    onChange={e => setInvoiceDate(e.target.value)}
+                    onBlur={() => setEditingCell(null)} />
+                ) : (
+                  <span className="invoice-value">{invoiceDate}</span>
+                )}
+              </div>
+            </div>
+            <div className="invoice-meta-row">
+              <span className="invoice-meta-label">Notes:</span>
+              <div className="invoice-field" onDoubleClick={() => setEditingCell('notes')}>
+                {editingCell === 'notes' ? (
+                  <input autoFocus className="invoice-input" placeholder="Any notes..."
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    onBlur={() => setEditingCell(null)} />
+                ) : (
+                  <span className={`invoice-value ${!notes ? 'placeholder' : ''}`}>
+                    {notes || 'Double-click to add notes'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Invoice Table */}
+        <table className="invoice-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Discount %</th>
+              <th>VAT Incl.</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index} className="invoice-row">
+                <td onDoubleClick={() => setEditingCell(`${index}-code`)}>
+                  {editingCell === `${index}-code` ? (
+                    <input autoFocus className="invoice-cell-input"
+                      value={row.code}
+                      onChange={e => updateRow(index, 'code', e.target.value)}
+                      onBlur={() => setEditingCell(null)} />
+                  ) : (
+                    <span className={!row.code ? 'cell-placeholder' : ''}>{row.code || '—'}</span>
+                  )}
+                </td>
+                <td onDoubleClick={() => setEditingCell(`${index}-description`)}>
+                  {editingCell === `${index}-description` ? (
+                    <input autoFocus className="invoice-cell-input wide"
+                      value={row.description}
+                      onChange={e => updateRow(index, 'description', e.target.value)}
+                      onBlur={() => setEditingCell(null)} />
+                  ) : (
+                    <span className={!row.description ? 'cell-placeholder' : ''}>
+                      {row.description || 'Double-click to edit'}
+                    </span>
+                  )}
+                </td>
+                <td onDoubleClick={() => setEditingCell(`${index}-quantity`)}>
+                  {editingCell === `${index}-quantity` ? (
+                    <input autoFocus className="invoice-cell-input narrow" type="number"
+                      value={row.quantity}
+                      onChange={e => updateRow(index, 'quantity', e.target.value)}
+                      onBlur={() => setEditingCell(null)} />
+                  ) : (
+                    <span className={!row.quantity ? 'cell-placeholder' : ''}>{row.quantity || '0'}</span>
+                  )}
+                </td>
+                <td onDoubleClick={() => setEditingCell(`${index}-price`)}>
+                  {editingCell === `${index}-price` ? (
+                    <input autoFocus className="invoice-cell-input narrow" type="number"
+                      value={row.price}
+                      onChange={e => updateRow(index, 'price', e.target.value)}
+                      onBlur={() => setEditingCell(null)} />
+                  ) : (
+                    <span className={!row.price ? 'cell-placeholder' : ''}>
+                      {row.price ? `P${parseFloat(row.price).toFixed(2)}` : '0.00'}
+                    </span>
+                  )}
+                </td>
+                <td onDoubleClick={() => setEditingCell(`${index}-discount`)}>
+                  {editingCell === `${index}-discount` ? (
+                    <input autoFocus className="invoice-cell-input narrow" type="number"
+                      value={row.discount}
+                      onChange={e => updateRow(index, 'discount', e.target.value)}
+                      onBlur={() => setEditingCell(null)} />
+                  ) : (
+                    <span>{row.discount ? `${row.discount}%` : '0%'}</span>
+                  )}
+                </td>
+                <td className="vat-cell">
+                  <input
+                    type="checkbox"
+                    checked={row.vat_included}
+                    onChange={e => updateRow(index, 'vat_included', e.target.checked)}
+                    title={row.vat_included ? 'VAT included in price' : 'VAT will be added'}
+                  />
+                </td>
+                <td className="total-cell">
+                  {row.description && row.price && row.quantity
+                    ? `P${getLineTotalWithVAT(row).toFixed(2)}`
+                    : '—'}
+                </td>
+                <td className="row-action no-print">
+                  <button className="remove-btn" onClick={() => removeRow(index)}>
+                    <Trash2 size={12} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Add Row Button */}
+        <div className="add-row-wrap no-print">
+          <button className="add-row-btn" onClick={addRow}>
+            <Plus size={14} /> Add Row
+          </button>
+        </div>
+
+        {/* Summary */}
+        <div className="invoice-summary">
+          <div className="invoice-summary-box">
+            <div className="summary-row">
+              <span>Line Discount Total</span>
+              <span>P{lineDiscountTotal.toFixed(2)}</span>
+            </div>
+            <div className="summary-row">
+              <span>Total Exclusive</span>
+              <span>P{totalExclusive.toFixed(2)}</span>
+            </div>
+            <div className="summary-row">
+              <span>VAT (14%)</span>
+              <span>P{totalVAT.toFixed(2)}</span>
+            </div>
+            <div className="summary-row total-row">
+              <span>TOTAL</span>
+              <span>P {total.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="invoice-footer">
+          <div className="invoice-footer-left">
+            <p>Date: ___________________________</p>
+          </div>
+        </div>
+
       </div>
-
-      {/* Totals */}
-      <div className="invoice-totals">
-        <h3>Invoice Summary</h3>
-        <div className="totals-row">
-          <span>Total Excluding VAT:</span>
-          <span>P{totalExVat.toFixed(2)}</span>
-        </div>
-        <div className="totals-row" style={{ color: '#e67e00' }}>
-          <span>Total VAT (14%):</span>
-          <span>P{totalVat.toFixed(2)}</span>
-        </div>
-        <div className="totals-row total">
-          <strong>Total Including VAT:</strong>
-          <strong>P{totalIncVat.toFixed(2)}</strong>
-        </div>
-      </div>
-
-      {message && <p className={`message ${messageType}`}>{message}</p>}
-
-      <button
-        className="btn-primary full-width"
-        onClick={handleSave}
-        disabled={saving}
-      >
-        {saving ? 'Saving...' : '✅ Save Invoice & Add Products to Inventory'}
-      </button>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getProducts, getSuppliers, getPurchases, supabase } from '../lib/supabase'
+import { Package, Factory, Search, Edit2, Trash2, Save, X, ChevronLeft, AlertTriangle } from 'lucide-react'
 
 function Inventory() {
   const [products, setProducts] = useState([])
@@ -64,7 +65,7 @@ function Inventory() {
       setMessage('Error updating: ' + error.message)
       setMessageType('error')
     } else {
-      setMessage('✅ Product updated!')
+      setMessage('Product updated successfully!')
       setMessageType('success')
       setEditingId(null)
       fetchAll()
@@ -78,7 +79,7 @@ function Inventory() {
       setMessage('Error deleting: ' + error.message)
       setMessageType('error')
     } else {
-      setMessage(`✅ "${name}" deleted!`)
+      setMessage(`"${name}" deleted successfully!`)
       setMessageType('success')
       fetchAll()
     }
@@ -91,7 +92,7 @@ function Inventory() {
       setMessage('Error deleting supplier: ' + error.message)
       setMessageType('error')
     } else {
-      setMessage(`✅ Supplier "${name}" deleted!`)
+      setMessage(`Supplier "${name}" deleted!`)
       setMessageType('success')
       setSelectedSupplier(null)
       fetchAll()
@@ -109,20 +110,20 @@ function Inventory() {
 
   return (
     <div className="panel">
-      <h2>📦 Inventory</h2>
+      <h2>Inventory</h2>
 
       <div className="filter-tabs">
         <button
           className={view === 'products' ? 'active' : ''}
           onClick={() => { setView('products'); setSelectedSupplier(null) }}
         >
-          📋 All Products ({products.length})
+          <Package size={15} /> All Products ({products.length})
         </button>
         <button
           className={view === 'suppliers' ? 'active' : ''}
           onClick={() => { setView('suppliers'); setSelectedSupplier(null) }}
         >
-          🏭 Suppliers ({suppliers.length})
+          <Factory size={15} /> Suppliers ({suppliers.length})
         </button>
       </div>
 
@@ -134,12 +135,15 @@ function Inventory() {
           <div className="section-header">
             <h3>All Products ({filtered.length})</h3>
             <div className="filters">
-              <input
-                type="text"
-                placeholder="🔍 Search..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+              <div className="search-wrap">
+                <Search size={14} />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -167,40 +171,26 @@ function Inventory() {
                   <tr key={p.id} className={lowStock && !isEditing ? 'low-stock-row' : ''}>
                     <td>
                       {isEditing ? (
-                        <input
-                          className="edit-input"
-                          value={editData.barcode}
-                          onChange={e => setEditData({ ...editData, barcode: e.target.value })}
-                        />
+                        <input className="edit-input" value={editData.barcode}
+                          onChange={e => setEditData({ ...editData, barcode: e.target.value })} />
                       ) : p.barcode}
                     </td>
                     <td>
                       {isEditing ? (
-                        <input
-                          className="edit-input"
-                          value={editData.name}
-                          onChange={e => setEditData({ ...editData, name: e.target.value })}
-                        />
+                        <input className="edit-input" value={editData.name}
+                          onChange={e => setEditData({ ...editData, name: e.target.value })} />
                       ) : p.name}
                     </td>
                     <td>
                       {isEditing ? (
-                        <input
-                          className="edit-input small"
-                          type="number"
-                          value={editData.cost_price}
-                          onChange={e => setEditData({ ...editData, cost_price: e.target.value })}
-                        />
+                        <input className="edit-input small" type="number" value={editData.cost_price}
+                          onChange={e => setEditData({ ...editData, cost_price: e.target.value })} />
                       ) : `P${parseFloat(p.cost_price).toFixed(2)}`}
                     </td>
                     <td>
                       {isEditing ? (
-                        <input
-                          className="edit-input small"
-                          type="number"
-                          value={editData.selling_price}
-                          onChange={e => setEditData({ ...editData, selling_price: e.target.value })}
-                        />
+                        <input className="edit-input small" type="number" value={editData.selling_price}
+                          onChange={e => setEditData({ ...editData, selling_price: e.target.value })} />
                       ) : `P${parseFloat(p.selling_price).toFixed(2)}`}
                     </td>
                     <td>
@@ -210,38 +200,39 @@ function Inventory() {
                     </td>
                     <td>
                       {isEditing ? (
-                        <input
-                          className="edit-input small"
-                          type="number"
-                          value={editData.stock}
-                          onChange={e => setEditData({ ...editData, stock: e.target.value })}
-                        />
+                        <input className="edit-input small" type="number" value={editData.stock}
+                          onChange={e => setEditData({ ...editData, stock: e.target.value })} />
                       ) : (
                         <span className={lowStock ? 'low-stock-text' : ''}>
-                          {p.stock} {lowStock ? '⚠️' : ''}
+                          {p.stock} {lowStock ? <AlertTriangle size={13} style={{ display: 'inline' }} /> : ''}
                         </span>
                       )}
                     </td>
                     <td>
                       {isEditing ? (
                         <div style={{ display: 'flex', gap: '4px' }}>
-                          <button className="btn-primary btn-small" onClick={() => saveEdit(p.id)}>💾</button>
-                          <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>✕</button>
+                          <button className="btn-primary btn-small" onClick={() => saveEdit(p.id)}>
+                            <Save size={13} />
+                          </button>
+                          <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>
+                            <X size={13} />
+                          </button>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button className="btn-small" onClick={() => {
                             setEditingId(p.id)
                             setEditData({
-                              name: p.name,
-                              barcode: p.barcode,
-                              cost_price: p.cost_price,
-                              selling_price: p.selling_price,
-                              stock: p.stock,
-                              low_stock_alert: p.low_stock_alert,
+                              name: p.name, barcode: p.barcode,
+                              cost_price: p.cost_price, selling_price: p.selling_price,
+                              stock: p.stock, low_stock_alert: p.low_stock_alert,
                             })
-                          }}>✏️</button>
-                          <button className="remove-btn" onClick={() => deleteProduct(p.id, p.name)}>🗑️</button>
+                          }}>
+                            <Edit2 size={13} />
+                          </button>
+                          <button className="remove-btn" onClick={() => deleteProduct(p.id, p.name)}>
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       )}
                     </td>
@@ -266,22 +257,18 @@ function Inventory() {
                 const totalProducts = supplierPurchases.reduce((sum, p) => sum + p.items.length, 0)
                 const totalSpent = supplierPurchases.reduce((sum, p) => sum + p.total_including_vat, 0)
                 return (
-                  <div
-                    key={s.id}
-                    className="supplier-card"
-                    onClick={() => setSelectedSupplier(s)}
-                  >
+                  <div key={s.id} className="supplier-card" onClick={() => setSelectedSupplier(s)}>
                     <div className="supplier-card-header">
-                      <span className="supplier-icon">🏭</span>
+                      <Factory size={22} className="supplier-icon" />
                       <h4>{s.name}</h4>
                     </div>
                     <div className="supplier-card-info">
-                      {s.contact && <p>📞 {s.contact}</p>}
-                      {s.email && <p>✉️ {s.email}</p>}
+                      {s.contact && <p>{s.contact}</p>}
+                      {s.email && <p>{s.email}</p>}
                     </div>
                     <div className="supplier-card-stats">
                       <span>{supplierPurchases.length} invoice{supplierPurchases.length !== 1 ? 's' : ''}</span>
-                      <span>{totalProducts} product{totalProducts !== 1 ? 's' : ''}</span>
+                      <span>{totalProducts} products</span>
                       <span>P{totalSpent.toFixed(2)} spent</span>
                     </div>
                   </div>
@@ -297,18 +284,15 @@ function Inventory() {
         <>
           <div className="supplier-detail-header">
             <button className="btn-secondary btn-small" onClick={() => setSelectedSupplier(null)}>
-              ← Back to Suppliers
+              <ChevronLeft size={14} /> Back
             </button>
             <div className="supplier-detail-title">
-              <h3>🏭 {selectedSupplier.name}</h3>
-              {selectedSupplier.contact && <span>📞 {selectedSupplier.contact}</span>}
-              {selectedSupplier.email && <span>✉️ {selectedSupplier.email}</span>}
+              <h3>{selectedSupplier.name}</h3>
+              {selectedSupplier.contact && <span>{selectedSupplier.contact}</span>}
+              {selectedSupplier.email && <span>{selectedSupplier.email}</span>}
             </div>
-            <button
-              className="remove-btn"
-              onClick={() => deleteSupplier(selectedSupplier.id, selectedSupplier.name)}
-            >
-              🗑️ Delete Supplier
+            <button className="remove-btn" onClick={() => deleteSupplier(selectedSupplier.id, selectedSupplier.name)}>
+              <Trash2 size={14} /> Delete Supplier
             </button>
           </div>
 
@@ -342,18 +326,13 @@ function Inventory() {
                       <td>{item.invoice_number || '—'}</td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="edit-input"
-                            value={editData.name}
-                            onChange={e => setEditData({ ...editData, name: e.target.value })}
-                          />
+                          <input className="edit-input" value={editData.name}
+                            onChange={e => setEditData({ ...editData, name: e.target.value })} />
                         ) : (
                           <>
                             {item.name}
                             {item.has_serial && item.serial_number && (
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>
-                                S/N: {item.serial_number}
-                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>S/N: {item.serial_number}</div>
                             )}
                           </>
                         )}
@@ -361,35 +340,23 @@ function Inventory() {
                       <td>{item.barcode || '—'}</td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="edit-input small"
-                            type="number"
-                            value={editData.cost_price}
-                            onChange={e => setEditData({ ...editData, cost_price: e.target.value })}
-                          />
+                          <input className="edit-input small" type="number" value={editData.cost_price}
+                            onChange={e => setEditData({ ...editData, cost_price: e.target.value })} />
                         ) : `P${parseFloat(item.cost_price).toFixed(2)}`}
                       </td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="edit-input small"
-                            type="number"
-                            value={editData.selling_price}
-                            onChange={e => setEditData({ ...editData, selling_price: e.target.value })}
-                          />
+                          <input className="edit-input small" type="number" value={editData.selling_price}
+                            onChange={e => setEditData({ ...editData, selling_price: e.target.value })} />
                         ) : `P${parseFloat(item.selling_price).toFixed(2)}`}
                       </td>
                       <td>
                         {isEditing ? (
-                          <input
-                            className="edit-input small"
-                            type="number"
-                            value={editData.stock}
-                            onChange={e => setEditData({ ...editData, stock: e.target.value })}
-                          />
+                          <input className="edit-input small" type="number" value={editData.stock}
+                            onChange={e => setEditData({ ...editData, stock: e.target.value })} />
                         ) : (
                           <span className={item.stock <= item.low_stock_alert ? 'low-stock-text' : ''}>
-                            {item.stock} {item.stock <= item.low_stock_alert ? '⚠️' : ''}
+                            {item.stock} {item.stock <= item.low_stock_alert ? <AlertTriangle size={13} style={{ display: 'inline' }} /> : ''}
                           </span>
                         )}
                       </td>
@@ -402,23 +369,28 @@ function Inventory() {
                         {item.live_id && (
                           isEditing ? (
                             <div style={{ display: 'flex', gap: '4px' }}>
-                              <button className="btn-primary btn-small" onClick={() => saveEdit(item.live_id)}>💾</button>
-                              <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>✕</button>
+                              <button className="btn-primary btn-small" onClick={() => saveEdit(item.live_id)}>
+                                <Save size={13} />
+                              </button>
+                              <button className="btn-secondary btn-small" onClick={() => setEditingId(null)}>
+                                <X size={13} />
+                              </button>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', gap: '4px' }}>
                               <button className="btn-small" onClick={() => {
                                 setEditingId(`sup-${i}`)
                                 setEditData({
-                                  name: item.name,
-                                  barcode: item.barcode,
-                                  cost_price: item.cost_price,
-                                  selling_price: item.selling_price,
-                                  stock: item.stock,
-                                  low_stock_alert: item.low_stock_alert,
+                                  name: item.name, barcode: item.barcode,
+                                  cost_price: item.cost_price, selling_price: item.selling_price,
+                                  stock: item.stock, low_stock_alert: item.low_stock_alert,
                                 })
-                              }}>✏️</button>
-                              <button className="remove-btn" onClick={() => deleteProduct(item.live_id, item.name)}>🗑️</button>
+                              }}>
+                                <Edit2 size={13} />
+                              </button>
+                              <button className="remove-btn" onClick={() => deleteProduct(item.live_id, item.name)}>
+                                <Trash2 size={13} />
+                              </button>
                             </div>
                           )
                         )}

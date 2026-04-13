@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, getDiscount, saveSale, updateStock } from '../lib/supabase'
 import ReceiptPreview from './ReceiptPreview'
+import { Scan, Trash2, Plus, Minus, Tag, RotateCcw, Receipt } from 'lucide-react'
 
 const VAT_RATE = 0.14
 
@@ -30,23 +31,21 @@ function Checkout() {
         .single()
 
       if (error || !data) {
-        setMessage(`❌ Barcode "${scannedCode}" not found!`)
+        setMessage(`Barcode "${scannedCode}" not found!`)
         setMessageType('error')
       } else if (data.stock <= 0) {
-        setMessage(`❌ "${data.name}" is out of stock!`)
+        setMessage(`"${data.name}" is out of stock!`)
         setMessageType('error')
       } else {
         const existing = items.find(i => i.barcode === scannedCode)
         if (existing) {
           setItems(items.map(i =>
-            i.barcode === scannedCode
-              ? { ...i, qty: i.qty + 1 }
-              : i
+            i.barcode === scannedCode ? { ...i, qty: i.qty + 1 } : i
           ))
         } else {
           setItems([...items, { ...data, qty: 1 }])
         }
-        setMessage(`✅ Added: ${data.name}`)
+        setMessage(`Added: ${data.name}`)
         setMessageType('success')
       }
       setBarcode('')
@@ -84,19 +83,15 @@ function Checkout() {
     return subtotalWithVAT - getDiscountAmount(subtotalWithVAT)
   }
 
-  function getProfit() {
-    return items.reduce((sum, i) => sum + ((i.selling_price - i.cost_price) * i.qty), 0)
-  }
-
   async function applyDiscount() {
     if (!discountCode) return
     const discount = await getDiscount(discountCode)
     if (!discount) {
-      setMessage('❌ Invalid discount code!')
+      setMessage('Invalid discount code!')
       setMessageType('error')
     } else {
       setAppliedDiscount(discount)
-      setMessage(`✅ Discount "${discount.code}" applied!`)
+      setMessage(`Discount "${discount.code}" applied!`)
       setMessageType('success')
     }
   }
@@ -127,7 +122,7 @@ function Checkout() {
 
     const error = await saveSale(sale)
     if (error) {
-      setMessage('❌ Error saving sale!')
+      setMessage('Error saving sale: ' + error.message)
       setMessageType('error')
       return
     }
@@ -143,7 +138,7 @@ function Checkout() {
     setAppliedDiscount(null)
     setDiscountCode('')
     setShowPreview(false)
-    setMessage('✅ Sale completed successfully!')
+    setMessage('Sale completed successfully!')
     setMessageType('success')
     barcodeRef.current.focus()
   }
@@ -156,18 +151,21 @@ function Checkout() {
 
   return (
     <div className="panel">
-      <h2>🛒 Checkout Mode</h2>
+      <h2>Checkout</h2>
       <p className="hint">Scan items to add them to the receipt.</p>
 
-      <input
-        ref={barcodeRef}
-        type="text"
-        placeholder="📷 Scan barcode here..."
-        value={barcode}
-        onChange={e => setBarcode(e.target.value)}
-        onKeyDown={handleBarcodeScan}
-        className="scan-input"
-      />
+      <div className="scan-wrap">
+        <Scan size={18} className="scan-icon" />
+        <input
+          ref={barcodeRef}
+          type="text"
+          placeholder="Scan barcode here..."
+          value={barcode}
+          onChange={e => setBarcode(e.target.value)}
+          onKeyDown={handleBarcodeScan}
+          className="scan-input"
+        />
+      </div>
 
       {message && <p className={`message ${messageType}`}>{message}</p>}
 
@@ -182,7 +180,7 @@ function Checkout() {
                 <th>Qty</th>
                 <th>Unit Price</th>
                 <th>Total</th>
-                <th>🗑️</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -198,15 +196,21 @@ function Checkout() {
                   </td>
                   <td>
                     <div className="qty-control">
-                      <button onClick={() => updateQty(item.barcode, item.qty - 1)}>−</button>
+                      <button onClick={() => updateQty(item.barcode, item.qty - 1)}>
+                        <Minus size={12} />
+                      </button>
                       <span>{item.qty}</span>
-                      <button onClick={() => updateQty(item.barcode, item.qty + 1)}>+</button>
+                      <button onClick={() => updateQty(item.barcode, item.qty + 1)}>
+                        <Plus size={12} />
+                      </button>
                     </div>
                   </td>
                   <td>P{parseFloat(item.selling_price).toFixed(2)}</td>
                   <td>P{(item.selling_price * item.qty).toFixed(2)}</td>
                   <td>
-                    <button className="remove-btn" onClick={() => removeItem(item.barcode)}>🗑️</button>
+                    <button className="remove-btn" onClick={() => removeItem(item.barcode)}>
+                      <Trash2 size={14} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -235,6 +239,7 @@ function Checkout() {
           </div>
 
           <div className="discount-row">
+            <Tag size={16} style={{ color: '#888', flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Discount code"
@@ -245,23 +250,17 @@ function Checkout() {
           </div>
 
           <div className="actions">
-            <button
-              className="btn-primary"
-              onClick={() => setShowPreview(true)}
-            >
-              🧾 Review & Print Receipt
+            <button className="btn-primary" onClick={() => setShowPreview(true)}>
+              <Receipt size={16} /> Review & Print Receipt
             </button>
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                setItems([])
-                setAppliedDiscount(null)
-                setDiscountCode('')
-                setMessage('')
-                barcodeRef.current.focus()
-              }}
-            >
-              🔄 New Sale
+            <button className="btn-secondary" onClick={() => {
+              setItems([])
+              setAppliedDiscount(null)
+              setDiscountCode('')
+              setMessage('')
+              barcodeRef.current.focus()
+            }}>
+              <RotateCcw size={16} /> New Sale
             </button>
           </div>
         </>
