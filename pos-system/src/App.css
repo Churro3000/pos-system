@@ -1452,6 +1452,21 @@ tr:hover td {
   }
 }
 
+/* ===== A4 INVOICE PREVIEW IN SUPPLIERS ===== */
+.a4-invoice-preview {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 32px;
+  margin-top: 8px;
+}
+
+.invoice-bar-print {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
 /* ===== PRINT STYLES ===== */
 @media print {
   .no-print, header, nav, .hint,
