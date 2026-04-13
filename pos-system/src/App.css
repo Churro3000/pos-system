@@ -1453,39 +1453,91 @@ tr:hover td {
 }
 
 /* ===== A4 INVOICE PREVIEW IN SUPPLIERS ===== */
-.a4-invoice-preview {
+.a4-invoice {
   background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 32px;
-  margin-top: 8px;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.10);
+  min-height: 277mm;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
 }
 
-.invoice-bar-print {
+.invoice-body {
+  flex: 1;
+}
+
+.invoice-summary {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: auto;
+  padding-top: 40px;
 }
 
 /* ===== PRINT STYLES ===== */
 @media print {
-  .no-print, header, nav, .hint,
-  .scan-input, .actions, .discount-row,
-  .totals-summary, .filter-tabs, .stats-grid,
-  .stats-row, .receipt-actions, .receipt-action-buttons {
-    display: none !important;
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   body, html {
-    background: white;
-    margin: 0;
-    padding: 0;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  .app {
+  /* Hide everything by default */
+  .app,
+  header,
+  nav,
+  .no-print {
     display: none !important;
   }
 
+  /* Show purchase/quotation page */
+  .purchase-page {
+    display: block !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-invoice {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 15mm 20mm !important;
+    min-height: 277mm !important;
+    page-break-after: always !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .a4-invoice:last-child {
+    page-break-after: avoid !important;
+  }
+
+  .invoice-table th {
+    background: #1a1a2e !important;
+    color: white !important;
+  }
+
+  .summary-row.total-row {
+    background: #1a1a2e !important;
+    color: white !important;
+  }
+
+  .invoice-field:hover {
+    background: transparent !important;
+  }
+
+  .cell-placeholder,
+  .invoice-value.placeholder {
+    display: none !important;
+  }
+
+  /* Receipt print */
   .receipt-overlay {
     position: static !important;
     background: none !important;
