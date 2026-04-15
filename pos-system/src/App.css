@@ -1370,109 +1370,31 @@ tr:hover td {
   border: 1px solid #f0c080;
 }
 
-/* ===== PRINT STYLES FOR A4 INVOICE ===== */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-
-  body, html {
-    background: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .app {
-    display: none !important;
-  }
-
-  .purchase-page {
-    display: block !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .a4-invoice {
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    padding: 20mm !important;
-    min-height: auto !important;
-  }
-
-  .invoice-table th {
-    background: #333 !important;
-    color: white !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .summary-row.total-row {
-    background: #333 !important;
-    color: white !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  .invoice-field:hover {
-    background: transparent !important;
-  }
-
-  .cell-placeholder {
-    display: none !important;
-  }
-
-  .invoice-value.placeholder {
-    display: none !important;
-  }
-
-  .receipt-overlay {
-    position: static !important;
-    background: none !important;
-    padding: 0 !important;
-    display: block !important;
-  }
-
-  .receipt-preview-container {
-    box-shadow: none !important;
-    padding: 0 !important;
-    max-width: 80mm !important;
-    margin: 0 auto !important;
-  }
-
-  .receipt-paper {
-    border: none !important;
-    padding: 4mm !important;
-  }
-
-  .receipt-table th,
-  .receipt-table td {
-    font-size: 10px !important;
-    padding: 3px 4px !important;
-  }
-}
-
 /* ===== A4 INVOICE PREVIEW IN SUPPLIERS ===== */
-.a4-invoice {
+.a4-invoice-preview {
   background: white;
-  border-radius: 12px;
-  padding: 40px;
-  box-shadow: 0 2px 20px rgba(0,0,0,0.10);
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 32px;
+  margin-top: 8px;
   min-height: 277mm;
   display: flex;
   flex-direction: column;
-  margin-bottom: 24px;
 }
 
-.invoice-body {
+.a4-invoice-preview .invoice-body {
   flex: 1;
 }
 
-.invoice-summary {
+.a4-invoice-preview .invoice-summary {
+  margin-top: auto;
+  padding-top: 60px;
+}
+
+.invoice-bar-print {
   display: flex;
   justify-content: flex-end;
-  margin-top: auto;
-  padding-top: 40px;
+  margin-top: 20px;
 }
 
 /* ===== PRINT STYLES ===== */
@@ -1488,7 +1410,6 @@ tr:hover td {
     padding: 0 !important;
   }
 
-  /* Hide everything by default */
   .app,
   header,
   nav,
@@ -1496,7 +1417,6 @@ tr:hover td {
     display: none !important;
   }
 
-  /* Show purchase/quotation page */
   .purchase-page {
     display: block !important;
     max-width: 100% !important;
@@ -1537,7 +1457,6 @@ tr:hover td {
     display: none !important;
   }
 
-  /* Receipt print */
   .receipt-overlay {
     position: static !important;
     background: none !important;

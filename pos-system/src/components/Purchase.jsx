@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react'
 import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers } from '../lib/supabase'
-import { Printer, Save, Plus, Trash2 } from 'lucide-react'
+import { Printer, Save, Plus, Trash2, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const VAT_RATE = 0.14
 
 function emptyRow() {
-  return { code: '', description: '', quantity: '', price: '', discount: '', vat_included: true }
+  return {
+    code: '',
+    description: '',
+    quantity: '',
+    price: '',
+    selling_price: '',
+    discount: '',
+    vat_included: true,
+  }
 }
 
 function emptyPage(pageNum) {
-  return {
-    id: pageNum,
-    rows: [emptyRow(), emptyRow(), emptyRow()],
-  }
+  return { id: pageNum, rows: [emptyRow(), emptyRow(), emptyRow()] }
 }
 
 function Purchase() {
@@ -28,15 +35,25 @@ function Purchase() {
   const [messageType, setMessageType] = useState('success')
   const [saving, setSaving] = useState(false)
   const [suppliers, setSuppliers] = useState([])
+  const [existingProducts, setExistingProducts] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [filteredSuppliers, setFilteredSuppliers] = useState([])
   const [editingCell, setEditingCell] = useState(null)
+  const [autoFillMessages, setAutoFillMessages] = useState({})
 
-  useEffect(() => { fetchSuppliers() }, [])
+  useEffect(() => {
+    fetchSuppliers()
+    fetchExistingProducts()
+  }, [])
 
   async function fetchSuppliers() {
     const data = await getSuppliers()
     setSuppliers(data)
+  }
+
+  async function fetchExistingProducts() {
+    const data = await getProducts()
+    setExistingProducts(data)
   }
 
   function handleSupplierInput(value) {
@@ -67,6 +84,36 @@ function Purchase() {
       ...updatedPages[pageIndex].rows[rowIndex],
       [field]: value
     }
+
+    // Auto-fill check when typing description or code
+    if (field === 'description' || field === 'code') {
+      const match = existingProducts.find(p =>
+        (field === 'description' && p.name.toLowerCase() === value.toLowerCase()) ||
+        (field === 'code' && p.barcode === value)
+      )
+      if (match) {
+        updatedPages[pageIndex].rows[rowIndex] = {
+          ...updatedPages[pageIndex].rows[rowIndex],
+          [field]: value,
+          code: match.barcode || updatedPages[pageIndex].rows[rowIndex].code,
+          description: match.name,
+          selling_price: match.selling_price,
+          price: match.cost_price,
+        }
+        setAutoFillMessages({
+          ...autoFillMessages,
+          [`${pageIndex}-${rowIndex}`]: `Auto-filled from inventory: ${match.name}`
+        })
+        setTimeout(() => {
+          setAutoFillMessages(prev => {
+            const updated = { ...prev }
+            delete updated[`${pageIndex}-${rowIndex}`]
+            return updated
+          })
+        }, 3000)
+      }
+    }
+
     setPages(updatedPages)
   }
 
@@ -162,7 +209,7 @@ function Purchase() {
         name: r.description,
         quantity: parseFloat(r.quantity) || 0,
         cost_price: parseFloat(r.price) || 0,
-        selling_price: 0,
+        selling_price: parseFloat(r.selling_price) || 0,
         vat_included: r.vat_included,
         discount: parseFloat(r.discount) || 0,
         line_total: getLineTotalWithVAT(r),
@@ -180,24 +227,27 @@ function Purchase() {
       return
     }
 
-    const existingProducts = await getProducts()
+    // Add/update products in inventory
+    const currentProducts = await getProducts()
     for (const r of activeRows) {
       if (!r.description) continue
-      const existing = existingProducts.find(e => e.barcode === r.code)
+      const existing = currentProducts.find(e =>
+        e.barcode === r.code || e.name.toLowerCase() === r.description.toLowerCase()
+      )
       const newStock = existing
         ? existing.stock + (parseFloat(r.quantity) || 0)
         : parseFloat(r.quantity) || 0
       await saveProduct({
-        barcode: r.code || `GEN-${Date.now()}-${Math.random()}`,
+        barcode: r.code || existing?.barcode || `GEN-${Date.now()}-${Math.random()}`,
         name: r.description,
         cost_price: parseFloat(r.price) || 0,
-        selling_price: existing ? existing.selling_price : parseFloat(r.price) * 1.3,
+        selling_price: parseFloat(r.selling_price) || existing?.selling_price || parseFloat(r.price) * 1.3,
         stock: newStock,
-        low_stock_alert: 5,
+        low_stock_alert: existing?.low_stock_alert || 5,
       })
     }
 
-    setMessage('Purchase invoice saved!')
+    setMessage('Purchase invoice saved and inventory updated!')
     setMessageType('success')
     setSupplierName('')
     setSupplierContact('')
@@ -207,7 +257,81 @@ function Purchase() {
     setPendingPayment(false)
     setPages([emptyPage(1)])
     fetchSuppliers()
+    fetchExistingProducts()
     setSaving(false)
+  }
+
+  function downloadPDF() {
+    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+    const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    doc.setFillColor(26, 26, 46)
+    doc.rect(0, 0, pageWidth, 35, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.text('PURCHASE INVOICE', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Invoice No: ${invoiceNumber || '—'}   Date: ${invoiceDate}`, pageWidth / 2, 25, { align: 'center' })
+
+    doc.setTextColor(50, 50, 50)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'bold')
+    doc.text(supplierName || 'Supplier Name', 14, 45)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    if (supplierContact) doc.text(supplierContact, 14, 52)
+    if (supplierEmail) doc.text(supplierEmail, 14, 58)
+    if (notes) doc.text(`Notes: ${notes}`, 14, 65)
+
+    autoTable(doc, {
+      startY: 72,
+      head: [['Code', 'Description', 'Qty', 'Cost Price', 'Selling Price', 'Discount %', 'VAT', 'Total']],
+      body: activeRows.map(r => [
+        r.code || '—',
+        r.description,
+        r.quantity,
+        `P${parseFloat(r.price || 0).toFixed(2)}`,
+        `P${parseFloat(r.selling_price || 0).toFixed(2)}`,
+        r.discount ? `${r.discount}%` : '0%',
+        r.vat_included ? 'Incl.' : 'Excl.',
+        `P${getLineTotalWithVAT(r).toFixed(2)}`,
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+    })
+
+    const finalY = doc.lastAutoTable.finalY + 10
+    autoTable(doc, {
+      startY: finalY,
+      body: [
+        ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
+        ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
+        ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
+        ['TOTAL', `P${total.toFixed(2)}`],
+      ],
+      theme: 'grid',
+      columnStyles: {
+        0: { halign: 'right', fontStyle: 'bold' },
+        1: { halign: 'right' },
+      },
+      bodyStyles: { fontSize: 9 },
+      didParseCell: (data) => {
+        if (data.row.index === 3) {
+          data.cell.styles.fillColor = [26, 26, 46]
+          data.cell.styles.textColor = [255, 255, 255]
+          data.cell.styles.fontStyle = 'bold'
+        }
+      },
+      margin: { left: pageWidth / 2, right: 14 },
+    })
+
+    doc.save(`purchase-invoice-${invoiceNumber || 'draft'}.pdf`)
   }
 
   const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
@@ -229,7 +353,10 @@ function Purchase() {
             <span>Pending Payment</span>
           </label>
           <button className="btn-secondary" onClick={() => window.print()}>
-            <Printer size={15} /> Print / PDF
+            <Printer size={15} /> Print
+          </button>
+          <button className="btn-secondary" onClick={downloadPDF}>
+            <Download size={15} /> Download PDF
           </button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>
             <Save size={15} /> {saving ? 'Saving...' : 'Save Invoice'}
@@ -246,9 +373,7 @@ function Purchase() {
             <div className="invoice-supplier">
               <h1 className="invoice-title">PURCHASE INVOICE</h1>
               {pageIndex > 0 && (
-                <p style={{ color: '#888', fontSize: '0.85rem' }}>
-                  Continued — Page {pageIndex + 1}
-                </p>
+                <p style={{ color: '#888', fontSize: '0.85rem' }}>Continued — Page {pageIndex + 1}</p>
               )}
               <div className="invoice-field" onDoubleClick={() => setEditingCell('supplierName')}>
                 {editingCell === 'supplierName' ? (
@@ -277,8 +402,7 @@ function Purchase() {
               <div className="invoice-field" onDoubleClick={() => setEditingCell('supplierContact')}>
                 {editingCell === 'supplierContact' ? (
                   <input autoFocus className="invoice-input" placeholder="Contact number"
-                    value={supplierContact}
-                    onChange={e => setSupplierContact(e.target.value)}
+                    value={supplierContact} onChange={e => setSupplierContact(e.target.value)}
                     onBlur={() => setEditingCell(null)} />
                 ) : (
                   <span className={`invoice-value ${!supplierContact ? 'placeholder' : ''}`}>
@@ -289,8 +413,7 @@ function Purchase() {
               <div className="invoice-field" onDoubleClick={() => setEditingCell('supplierEmail')}>
                 {editingCell === 'supplierEmail' ? (
                   <input autoFocus className="invoice-input" placeholder="Email address"
-                    value={supplierEmail}
-                    onChange={e => setSupplierEmail(e.target.value)}
+                    value={supplierEmail} onChange={e => setSupplierEmail(e.target.value)}
                     onBlur={() => setEditingCell(null)} />
                 ) : (
                   <span className={`invoice-value ${!supplierEmail ? 'placeholder' : ''}`}>
@@ -306,8 +429,7 @@ function Purchase() {
                 <div className="invoice-field" onDoubleClick={() => setEditingCell('invoiceNumber')}>
                   {editingCell === 'invoiceNumber' ? (
                     <input autoFocus className="invoice-input" placeholder="INV-001"
-                      value={invoiceNumber}
-                      onChange={e => setInvoiceNumber(e.target.value)}
+                      value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)}
                       onBlur={() => setEditingCell(null)} />
                   ) : (
                     <span className={`invoice-value ${!invoiceNumber ? 'placeholder' : ''}`}>
@@ -325,8 +447,7 @@ function Purchase() {
                 <div className="invoice-field" onDoubleClick={() => setEditingCell('notes')}>
                   {editingCell === 'notes' ? (
                     <input autoFocus className="invoice-input" placeholder="Any notes..."
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
+                      value={notes} onChange={e => setNotes(e.target.value)}
                       onBlur={() => setEditingCell(null)} />
                   ) : (
                     <span className={`invoice-value ${!notes ? 'placeholder' : ''}`}>
@@ -345,7 +466,8 @@ function Purchase() {
                   <th>Code</th>
                   <th>Description</th>
                   <th>Qty</th>
-                  <th>Price</th>
+                  <th>Cost Price</th>
+                  <th>Selling Price</th>
                   <th>Discount %</th>
                   <th>VAT Incl.</th>
                   <th>Total</th>
@@ -354,76 +476,98 @@ function Purchase() {
               </thead>
               <tbody>
                 {page.rows.map((row, rowIndex) => (
-                  <tr key={rowIndex} className="invoice-row">
-                    <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-code`)}>
-                      {editingCell === `${pageIndex}-${rowIndex}-code` ? (
-                        <input autoFocus className="invoice-cell-input"
-                          value={row.code}
-                          onChange={e => updateRow(pageIndex, rowIndex, 'code', e.target.value)}
-                          onBlur={() => setEditingCell(null)} />
-                      ) : (
-                        <span className={!row.code ? 'cell-placeholder' : ''}>{row.code || '—'}</span>
-                      )}
-                    </td>
-                    <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-description`)}>
-                      {editingCell === `${pageIndex}-${rowIndex}-description` ? (
-                        <input autoFocus className="invoice-cell-input wide"
-                          value={row.description}
-                          onChange={e => updateRow(pageIndex, rowIndex, 'description', e.target.value)}
-                          onBlur={() => setEditingCell(null)} />
-                      ) : (
-                        <span className={!row.description ? 'cell-placeholder' : ''}>
-                          {row.description || 'Double-click to edit'}
-                        </span>
-                      )}
-                    </td>
-                    <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-quantity`)}>
-                      {editingCell === `${pageIndex}-${rowIndex}-quantity` ? (
-                        <input autoFocus className="invoice-cell-input narrow" type="number"
-                          value={row.quantity}
-                          onChange={e => updateRow(pageIndex, rowIndex, 'quantity', e.target.value)}
-                          onBlur={() => setEditingCell(null)} />
-                      ) : (
-                        <span className={!row.quantity ? 'cell-placeholder' : ''}>{row.quantity || '0'}</span>
-                      )}
-                    </td>
-                    <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-price`)}>
-                      {editingCell === `${pageIndex}-${rowIndex}-price` ? (
-                        <input autoFocus className="invoice-cell-input narrow" type="number"
-                          value={row.price}
-                          onChange={e => updateRow(pageIndex, rowIndex, 'price', e.target.value)}
-                          onBlur={() => setEditingCell(null)} />
-                      ) : (
-                        <span className={!row.price ? 'cell-placeholder' : ''}>
-                          {row.price ? `P${parseFloat(row.price).toFixed(2)}` : '0.00'}
-                        </span>
-                      )}
-                    </td>
-                    <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-discount`)}>
-                      {editingCell === `${pageIndex}-${rowIndex}-discount` ? (
-                        <input autoFocus className="invoice-cell-input narrow" type="number"
-                          value={row.discount}
-                          onChange={e => updateRow(pageIndex, rowIndex, 'discount', e.target.value)}
-                          onBlur={() => setEditingCell(null)} />
-                      ) : (
-                        <span>{row.discount ? `${row.discount}%` : '0%'}</span>
-                      )}
-                    </td>
-                    <td className="vat-cell">
-                      <input type="checkbox" checked={row.vat_included}
-                        onChange={e => updateRow(pageIndex, rowIndex, 'vat_included', e.target.checked)} />
-                    </td>
-                    <td className="total-cell">
-                      {row.description && row.price && row.quantity
-                        ? `P${getLineTotalWithVAT(row).toFixed(2)}`
-                        : '—'}
-                    </td>
-                    <td className="row-action no-print">
-                      <button className="remove-btn" onClick={() => removeRow(pageIndex, rowIndex)}>
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={rowIndex} className="invoice-row">
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-code`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-code` ? (
+                          <input autoFocus className="invoice-cell-input"
+                            value={row.code}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'code', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span className={!row.code ? 'cell-placeholder' : ''}>{row.code || '—'}</span>
+                        )}
+                      </td>
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-description`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-description` ? (
+                          <input autoFocus className="invoice-cell-input wide"
+                            value={row.description}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'description', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span className={!row.description ? 'cell-placeholder' : ''}>
+                            {row.description || 'Double-click to edit'}
+                          </span>
+                        )}
+                      </td>
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-quantity`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-quantity` ? (
+                          <input autoFocus className="invoice-cell-input narrow" type="number"
+                            value={row.quantity}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'quantity', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span className={!row.quantity ? 'cell-placeholder' : ''}>{row.quantity || '0'}</span>
+                        )}
+                      </td>
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-price`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-price` ? (
+                          <input autoFocus className="invoice-cell-input narrow" type="number"
+                            value={row.price}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'price', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span className={!row.price ? 'cell-placeholder' : ''}>
+                            {row.price ? `P${parseFloat(row.price).toFixed(2)}` : '0.00'}
+                          </span>
+                        )}
+                      </td>
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-selling_price`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-selling_price` ? (
+                          <input autoFocus className="invoice-cell-input narrow" type="number"
+                            value={row.selling_price}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'selling_price', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span className={!row.selling_price ? 'cell-placeholder' : ''}>
+                            {row.selling_price ? `P${parseFloat(row.selling_price).toFixed(2)}` : '0.00'}
+                          </span>
+                        )}
+                      </td>
+                      <td onDoubleClick={() => setEditingCell(`${pageIndex}-${rowIndex}-discount`)}>
+                        {editingCell === `${pageIndex}-${rowIndex}-discount` ? (
+                          <input autoFocus className="invoice-cell-input narrow" type="number"
+                            value={row.discount}
+                            onChange={e => updateRow(pageIndex, rowIndex, 'discount', e.target.value)}
+                            onBlur={() => setEditingCell(null)} />
+                        ) : (
+                          <span>{row.discount ? `${row.discount}%` : '0%'}</span>
+                        )}
+                      </td>
+                      <td className="vat-cell">
+                        <input type="checkbox" checked={row.vat_included}
+                          onChange={e => updateRow(pageIndex, rowIndex, 'vat_included', e.target.checked)} />
+                      </td>
+                      <td className="total-cell">
+                        {row.description && row.price && row.quantity
+                          ? `P${getLineTotalWithVAT(row).toFixed(2)}` : '—'}
+                      </td>
+                      <td className="row-action no-print">
+                        <button className="remove-btn" onClick={() => removeRow(pageIndex, rowIndex)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                    {autoFillMessages[`${pageIndex}-${rowIndex}`] && (
+                      <tr key={`${rowIndex}-msg`} className="no-print">
+                        <td colSpan="9">
+                          <p style={{ color: '#2d8a4e', fontSize: '0.78rem', padding: '2px 8px', background: '#f0fff4', borderRadius: '4px' }}>
+                            ✓ {autoFillMessages[`${pageIndex}-${rowIndex}`]}
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>

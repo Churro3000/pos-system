@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { saveQuotation, getQuotations } from '../lib/supabase'
-import { Printer, Save, Plus, Trash2, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { Printer, Save, Plus, Trash2, FileText, ChevronDown, ChevronUp, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const VAT_RATE = 0.14
 
@@ -147,12 +149,82 @@ function Quotation() {
     setSaving(false)
   }
 
+  function downloadPDF() {
+    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+    const activeRows = getAllRows().filter(r => r.description && r.unit_price && r.quantity)
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    doc.setFillColor(26, 26, 46)
+    doc.rect(0, 0, pageWidth, 35, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.text('QUOTATION', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Quote No: ${quoteNumber || '—'}   Date: ${quoteDate}`, pageWidth / 2, 25, { align: 'center' })
+
+    doc.setTextColor(50, 50, 50)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'bold')
+    doc.text(customerName || 'Customer Name', 14, 45)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    if (customerContact) doc.text(customerContact, 14, 52)
+    if (validUntil) doc.text(`Valid Until: ${validUntil}`, 14, 58)
+    if (notes) doc.text(`Notes: ${notes}`, 14, 65)
+
+    autoTable(doc, {
+      startY: 72,
+      head: [['Description', 'Qty', 'Unit Price', 'Discount %', 'VAT', 'Total']],
+      body: activeRows.map(r => [
+        r.description,
+        r.quantity,
+        `P${parseFloat(r.unit_price || 0).toFixed(2)}`,
+        r.discount ? `${r.discount}%` : '0%',
+        r.vat_included ? 'Incl.' : 'Excl.',
+        `P${getLineTotalWithVAT(r).toFixed(2)}`,
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+    })
+
+    const finalY = doc.lastAutoTable.finalY + 10
+    autoTable(doc, {
+      startY: finalY,
+      body: [
+        ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
+        ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
+        ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
+        ['TOTAL', `P${total.toFixed(2)}`],
+      ],
+      theme: 'grid',
+      columnStyles: {
+        0: { halign: 'right', fontStyle: 'bold' },
+        1: { halign: 'right' },
+      },
+      bodyStyles: { fontSize: 9 },
+      didParseCell: (data) => {
+        if (data.row.index === 3) {
+          data.cell.styles.fillColor = [26, 26, 46]
+          data.cell.styles.textColor = [255, 255, 255]
+          data.cell.styles.fontStyle = 'bold'
+        }
+      },
+      margin: { left: pageWidth / 2, right: 14 },
+    })
+
+    doc.save(`quotation-${quoteNumber || 'draft'}.pdf`)
+  }
+
   function printQuote(q) {
     const printWindow = window.open('', '_blank')
     const rowsHtml = q.items.map(item => `
       <tr>
-        <td>${item.name}</td>
-        <td>${item.quantity}</td>
+        <td>${item.name}</td><td>${item.quantity}</td>
         <td>P${parseFloat(item.unit_price).toFixed(2)}</td>
         <td>${item.discount ? item.discount + '%' : '0%'}</td>
         <td>${item.vat_included ? 'Included' : 'Excluded'}</td>
@@ -160,42 +232,33 @@ function Quotation() {
       </tr>
     `).join('')
 
-    printWindow.document.write(`
-      <!DOCTYPE html><html><head><title>Quotation</title>
-      <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 20mm; color: #333; }
-        h1 { font-size: 1.6rem; letter-spacing: 2px; color: #1a1a2e; }
-        .top { display: flex; justify-content: space-between; margin: 24px 0 32px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-        th { background: #1a1a2e; color: white; padding: 10px 12px; text-align: left; font-size: 0.78rem; text-transform: uppercase; }
-        td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 0.88rem; }
-        .summary { display: flex; justify-content: flex-end; margin-top: auto; }
-        .summary-box { min-width: 280px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
-        .srow { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 0.9rem; border-bottom: 1px solid #f0f0f0; }
-        .total-row { background: #1a1a2e; color: white; font-weight: 700; }
-      </style></head><body>
-      <h1>QUOTATION</h1>
-      <div class="top">
-        <div>
-          <strong style="font-size:1.1rem">${q.customer_name}</strong><br>
-          ${q.customer_contact || ''}
-          ${q.valid_until ? `<br><span style="color:#2d8a4e">Valid Until: ${q.valid_until}</span>` : ''}
-        </div>
-        <div><span style="color:#888;font-size:0.75rem">DATE</span><br>${new Date(q.created_at).toLocaleDateString()}</div>
-      </div>
-      <table>
-        <thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount %</th><th>VAT</th><th>Total</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      <div class="summary">
-        <div class="summary-box">
-          <div class="srow"><span>Total Exclusive</span><span>P${parseFloat(q.subtotal).toFixed(2)}</span></div>
-          <div class="srow"><span>VAT (14%)</span><span>P${parseFloat(q.vat_amount).toFixed(2)}</span></div>
-          <div class="srow total-row"><span>TOTAL</span><span>P${parseFloat(q.total).toFixed(2)}</span></div>
-        </div>
-      </div>
-      </body></html>
-    `)
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Quotation</title>
+    <style>
+      body{font-family:'Segoe UI',sans-serif;margin:20mm;color:#333}
+      h1{font-size:1.6rem;letter-spacing:2px;color:#1a1a2e}
+      .top{display:flex;justify-content:space-between;margin:24px 0 32px}
+      table{width:100%;border-collapse:collapse;margin-bottom:24px}
+      th{background:#1a1a2e;color:white;padding:10px 12px;text-align:left;font-size:.78rem;text-transform:uppercase}
+      td{padding:8px 12px;border-bottom:1px solid #eee;font-size:.88rem}
+      .summary{display:flex;justify-content:flex-end}
+      .summary-box{min-width:280px;border:1px solid #ddd;border-radius:8px;overflow:hidden}
+      .srow{display:flex;justify-content:space-between;padding:8px 16px;font-size:.9rem;border-bottom:1px solid #f0f0f0}
+      .total-row{background:#1a1a2e;color:white;font-weight:700}
+    </style></head><body>
+    <h1>QUOTATION</h1>
+    <div class="top">
+      <div><strong style="font-size:1.1rem">${q.customer_name}</strong><br>${q.customer_contact || ''}
+      ${q.valid_until ? `<br><span style="color:#2d8a4e">Valid Until: ${q.valid_until}</span>` : ''}</div>
+      <div><span style="color:#888;font-size:.75rem">DATE</span><br>${new Date(q.created_at).toLocaleDateString()}</div>
+    </div>
+    <table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Discount %</th><th>VAT</th><th>Total</th></tr></thead>
+    <tbody>${rowsHtml}</tbody></table>
+    <div class="summary"><div class="summary-box">
+      <div class="srow"><span>Total Exclusive</span><span>P${parseFloat(q.subtotal).toFixed(2)}</span></div>
+      <div class="srow"><span>VAT (14%)</span><span>P${parseFloat(q.vat_amount).toFixed(2)}</span></div>
+      <div class="srow total-row"><span>TOTAL</span><span>P${parseFloat(q.total).toFixed(2)}</span></div>
+    </div></div>
+    </body></html>`)
     printWindow.document.close()
     printWindow.print()
   }
@@ -218,7 +281,10 @@ function Quotation() {
           {view === 'new' && (
             <>
               <button className="btn-secondary" onClick={() => window.print()}>
-                <Printer size={15} /> Print / PDF
+                <Printer size={15} /> Print
+              </button>
+              <button className="btn-secondary" onClick={downloadPDF}>
+                <Download size={15} /> Download PDF
               </button>
               <button className="btn-primary" onClick={handleSave} disabled={saving}>
                 <Save size={15} /> {saving ? 'Saving...' : 'Save Quotation'}
@@ -248,7 +314,6 @@ function Quotation() {
                   </span>
                 )}
               </div>
-
               <div className="invoice-field" onDoubleClick={() => setEditingCell('customerContact')}>
                 {editingCell === 'customerContact' ? (
                   <input autoFocus className="invoice-input" placeholder="Contact number"
@@ -429,7 +494,7 @@ function Quotation() {
             <p className="empty">No quotations yet.</p>
           ) : (
             <div className="invoice-list">
-              {quotations.map((q, i) => (
+              {quotations.map((q) => (
                 <div key={q.id} className="invoice-bar">
                   <div className="invoice-bar-header"
                     onClick={() => setExpandedQuote(expandedQuote === q.id ? null : q.id)}>
@@ -463,26 +528,30 @@ function Quotation() {
                             </div>
                           </div>
                         </div>
-                        <table className="invoice-table">
-                          <thead>
-                            <tr>
-                              <th>Description</th><th>Qty</th><th>Unit Price</th>
-                              <th>Discount %</th><th>VAT</th><th>Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {q.items.map((item, j) => (
-                              <tr key={j}>
-                                <td>{item.name}</td>
-                                <td>{item.quantity}</td>
-                                <td>P{parseFloat(item.unit_price).toFixed(2)}</td>
-                                <td>{item.discount ? `${item.discount}%` : '0%'}</td>
-                                <td><span className={`status-badge ${item.vat_included ? 'accepted' : 'pending'}`}>{item.vat_included ? 'Incl.' : 'Excl.'}</span></td>
-                                <td>P{parseFloat(item.line_total || 0).toFixed(2)}</td>
+
+                        <div className="invoice-body">
+                          <table className="invoice-table">
+                            <thead>
+                              <tr>
+                                <th>Description</th><th>Qty</th><th>Unit Price</th>
+                                <th>Discount %</th><th>VAT</th><th>Total</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {q.items.map((item, j) => (
+                                <tr key={j}>
+                                  <td>{item.name}</td>
+                                  <td>{item.quantity}</td>
+                                  <td>P{parseFloat(item.unit_price).toFixed(2)}</td>
+                                  <td>{item.discount ? `${item.discount}%` : '0%'}</td>
+                                  <td><span className={`status-badge ${item.vat_included ? 'accepted' : 'pending'}`}>{item.vat_included ? 'Incl.' : 'Excl.'}</span></td>
+                                  <td>P{parseFloat(item.line_total || 0).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
                         <div className="invoice-summary">
                           <div className="invoice-summary-box">
                             <div className="summary-row"><span>Total Exclusive</span><span>P{parseFloat(q.subtotal).toFixed(2)}</span></div>
@@ -490,6 +559,7 @@ function Quotation() {
                             <div className="summary-row total-row"><span>TOTAL</span><span>P{parseFloat(q.total).toFixed(2)}</span></div>
                           </div>
                         </div>
+
                         <div className="invoice-bar-print no-print">
                           <button className="btn-primary" onClick={() => printQuote(q)}>Print Quotation</button>
                         </div>
