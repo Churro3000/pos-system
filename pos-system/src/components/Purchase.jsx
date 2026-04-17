@@ -174,12 +174,21 @@ function Purchase({ editingInvoice, onClearEdit }) {
   }
 
   async function handleSave() {
-    if (!supplierName) { setMessage('Please enter supplier name!'); setMessageType('error'); return }
+    if (!supplierName) { 
+      setMessage('Please enter supplier name!'); 
+      setMessageType('error'); 
+      return 
+    }
     const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
-    if (activeRows.length === 0) { setMessage('Please add at least one product!'); setMessageType('error'); return }
+    if (activeRows.length === 0) { 
+      setMessage('Please add at least one product!'); 
+      setMessageType('error'); 
+      return 
+    }
 
     setSaving(true)
     const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+
     await saveSupplier({ name: supplierName, contact: supplierContact, email: supplierEmail })
 
     const purchaseData = {
@@ -213,19 +222,47 @@ function Purchase({ editingInvoice, onClearEdit }) {
       error = await savePurchase(purchaseData)
     }
 
-    if (error) { setMessage('Error saving: ' + error.message); setMessageType('error'); setSaving(false); return }
+    if (error) { 
+      setMessage('Error saving: ' + error.message); 
+      setMessageType('error'); 
+      setSaving(false); 
+      return 
+    }
 
+    // === FIXED INVENTORY UPDATE SECTION ===
+    // Add/update products in inventory
     const currentProducts = await getProducts()
     for (const r of activeRows) {
       if (!r.description) continue
-      const existing = currentProducts.find(e => e.barcode === r.code || e.name.toLowerCase() === r.description.toLowerCase())
-      const newStock = existing ? existing.stock + (parseFloat(r.quantity) || 0) : parseFloat(r.quantity) || 0
+
+      const existing = currentProducts.find(e =>
+        e.barcode === r.code || e.name.toLowerCase() === r.description.toLowerCase()
+      )
+
+      let newStock
+      if (editingInvoice) {
+        // Find the original quantity for this product in the old invoice
+        const originalItem = editingInvoice.items.find(i =>
+          i.barcode === r.code || i.name.toLowerCase() === r.description.toLowerCase()
+        )
+        const oldQty = originalItem ? parseFloat(originalItem.quantity) || 0 : 0
+        const newQty = parseFloat(r.quantity) || 0
+        const diff = newQty - oldQty
+        // Only adjust by the difference when editing
+        newStock = existing ? existing.stock + diff : newQty
+      } else {
+        // Normal behavior for new purchases
+        newStock = existing
+          ? existing.stock + (parseFloat(r.quantity) || 0)
+          : parseFloat(r.quantity) || 0
+      }
+
       await saveProduct({
         barcode: r.code || existing?.barcode || `GEN-${Date.now()}-${Math.random()}`,
         name: r.description,
         cost_price: parseFloat(r.price) || 0,
         selling_price: parseFloat(r.selling_price) || existing?.selling_price || parseFloat(r.price) * 1.3,
-        stock: newStock,
+        stock: Math.max(0, newStock),
         low_stock_alert: existing?.low_stock_alert || 5,
       })
     }
@@ -322,7 +359,12 @@ function Purchase({ editingInvoice, onClearEdit }) {
         </div>
         <div className="purchase-actions-right">
           {editingInvoice && (
-            <button className="btn-secondary" onClick={() => { if (onClearEdit) onClearEdit(); setSupplierName(''); setSupplierContact(''); setSupplierEmail(''); setInvoiceNumber(''); setNotes(''); setPendingPayment(false); setPages([emptyPage(1)]); setMessage('') }}>
+            <button className="btn-secondary" onClick={() => { 
+              if (onClearEdit) onClearEdit(); 
+              setSupplierName(''); setSupplierContact(''); setSupplierEmail(''); 
+              setInvoiceNumber(''); setNotes(''); setPendingPayment(false); 
+              setPages([emptyPage(1)]); setMessage('') 
+            }}>
               Cancel Edit
             </button>
           )}
