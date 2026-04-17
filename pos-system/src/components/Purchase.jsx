@@ -22,7 +22,7 @@ function emptyPage(pageNum) {
   return { id: pageNum, rows: [emptyRow(), emptyRow(), emptyRow()] }
 }
 
-function Purchase() {
+function Purchase({ editingInvoice, onClearEdit }) {
   const [supplierName, setSupplierName] = useState('')
   const [supplierContact, setSupplierContact] = useState('')
   const [supplierEmail, setSupplierEmail] = useState('')
@@ -42,9 +42,30 @@ function Purchase() {
   const [autoFillMessages, setAutoFillMessages] = useState({})
 
   useEffect(() => {
-    fetchSuppliers()
-    fetchExistingProducts()
-  }, [])
+  fetchSuppliers()
+  fetchExistingProducts()
+}, [])
+
+useEffect(() => {
+  if (editingInvoice) {
+    setSupplierName(editingInvoice.supplier_name || '')
+    setSupplierContact(editingInvoice.supplier_contact || '')
+    setSupplierEmail(editingInvoice.supplier_email || '')
+    setInvoiceNumber(editingInvoice.invoice_number || '')
+    setNotes(editingInvoice.notes || '')
+    setPendingPayment(editingInvoice.pending_payment || false)
+    const loadedRows = editingInvoice.items.map(item => ({
+      code: item.barcode || '',
+      description: item.name || '',
+      quantity: item.quantity || '',
+      price: item.cost_price || '',
+      selling_price: item.selling_price || '',
+      discount: item.discount || '',
+      vat_included: item.vat_included !== false,
+    }))
+    setPages([{ id: 1, rows: loadedRows.length > 0 ? loadedRows : [emptyRow()] }])
+  }
+}, [editingInvoice])
 
   async function fetchSuppliers() {
     const data = await getSuppliers()

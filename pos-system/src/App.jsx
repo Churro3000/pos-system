@@ -11,6 +11,12 @@ import './App.css'
 
 function App() {
   const [mode, setMode] = useState('checkout')
+  const [editingInvoice, setEditingInvoice] = useState(null)
+
+  function handleEditInvoice(purchase) {
+    setEditingInvoice(purchase)
+    setMode('purchase')
+  }
 
   const tabs = [
     { id: 'checkout', label: 'Checkout', icon: <ShoppingCart size={16} /> },
@@ -34,7 +40,7 @@ function App() {
             <button
               key={tab.id}
               className={mode === tab.id ? 'active' : ''}
-              onClick={() => setMode(tab.id)}
+              onClick={() => { setMode(tab.id); if (tab.id !== 'purchase') setEditingInvoice(null) }}
             >
               {tab.icon}
               <span>{tab.label}</span>
@@ -45,8 +51,8 @@ function App() {
       <main>
         {mode === 'inventory' && <Inventory />}
         {mode === 'checkout' && <Checkout />}
-        {mode === 'purchase' && <Purchase />}
-        {mode === 'suppliers' && <Suppliers />}
+        {mode === 'purchase' && <Purchase editingInvoice={editingInvoice} onClearEdit={() => setEditingInvoice(null)} />}
+        {mode === 'suppliers' && <Suppliers onEditInvoice={handleEditInvoice} />}
         {mode === 'quotation' && <Quotation />}
         {mode === 'sales' && <Sales />}
         {mode === 'dashboard' && <Dashboard />}
