@@ -150,75 +150,83 @@ function Quotation() {
   }
 
   function downloadPDF() {
-    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
-    const activeRows = getAllRows().filter(r => r.description && r.unit_price && r.quantity)
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.getWidth()
+  const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+  const activeRows = getAllRows().filter(r => r.description && r.unit_price && r.quantity)
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
 
-    doc.setFillColor(26, 26, 46)
-    doc.rect(0, 0, pageWidth, 35, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text('QUOTATION', pageWidth / 2, 15, { align: 'center' })
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Quote No: ${quoteNumber || '—'}   Date: ${quoteDate}`, pageWidth / 2, 25, { align: 'center' })
+  // Header
+  doc.setFillColor(26, 26, 46)
+  doc.rect(0, 0, pageWidth, 35, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.text('QUOTATION', pageWidth / 2, 15, { align: 'center' })
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Quote No: ${quoteNumber || '—'}   Date: ${quoteDate}`, pageWidth / 2, 25, { align: 'center' })
 
-    doc.setTextColor(50, 50, 50)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.text(customerName || 'Customer Name', 14, 45)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    if (customerContact) doc.text(customerContact, 14, 52)
-    if (validUntil) doc.text(`Valid Until: ${validUntil}`, 14, 58)
-    if (notes) doc.text(`Notes: ${notes}`, 14, 65)
+  // Customer info
+  doc.setTextColor(50, 50, 50)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text(customerName || 'Customer Name', 14, 45)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  let yPos = 52
+  if (customerContact) { doc.text(customerContact, 14, yPos); yPos += 7 }
+  if (validUntil) { doc.text(`Valid Until: ${validUntil}`, 14, yPos); yPos += 7 }
+  if (notes) { doc.text(`Notes: ${notes}`, 14, yPos) }
 
-    autoTable(doc, {
-      startY: 72,
-      head: [['Description', 'Qty', 'Unit Price', 'Discount %', 'VAT', 'Total']],
-      body: activeRows.map(r => [
-        r.description,
-        r.quantity,
-        `P${parseFloat(r.unit_price || 0).toFixed(2)}`,
-        r.discount ? `${r.discount}%` : '0%',
-        r.vat_included ? 'Incl.' : 'Excl.',
-        `P${getLineTotalWithVAT(r).toFixed(2)}`,
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      margin: { left: 14, right: 14 },
-    })
+  // Items table
+  autoTable(doc, {
+    startY: 72,
+    head: [['Description', 'Qty', 'Unit Price', 'Discount %', 'VAT', 'Total']],
+    body: activeRows.map(r => [
+      r.description,
+      r.quantity,
+      `P${parseFloat(r.unit_price || 0).toFixed(2)}`,
+      r.discount ? `${r.discount}%` : '0%',
+      r.vat_included ? 'Incl.' : 'Excl.',
+      `P${getLineTotalWithVAT(r).toFixed(2)}`,
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    margin: { left: 14, right: 14 },
+  })
 
-    const finalY = doc.lastAutoTable.finalY + 10
-    autoTable(doc, {
-      startY: finalY,
-      body: [
-        ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
-        ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
-        ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
-        ['TOTAL', `P${total.toFixed(2)}`],
-      ],
-      theme: 'grid',
-      columnStyles: {
-        0: { halign: 'right', fontStyle: 'bold' },
-        1: { halign: 'right' },
-      },
-      bodyStyles: { fontSize: 9 },
-      didParseCell: (data) => {
-        if (data.row.index === 3) {
-          data.cell.styles.fillColor = [26, 26, 46]
-          data.cell.styles.textColor = [255, 255, 255]
-          data.cell.styles.fontStyle = 'bold'
-        }
-      },
-      margin: { left: pageWidth / 2, right: 14 },
-    })
+  // Summary box pinned to bottom
+  const summaryHeight = 4 * 14 + 10
+  const summaryY = pageHeight - summaryHeight - 20
 
-    doc.save(`quotation-${quoteNumber || 'draft'}.pdf`)
-  }
+  autoTable(doc, {
+    startY: summaryY,
+    body: [
+      ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
+      ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
+      ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
+      ['TOTAL', `P${total.toFixed(2)}`],
+    ],
+    theme: 'grid',
+    columnStyles: {
+      0: { halign: 'right', fontStyle: 'bold' },
+      1: { halign: 'right' },
+    },
+    bodyStyles: { fontSize: 9 },
+    didParseCell: (data) => {
+      if (data.row.index === 3) {
+        data.cell.styles.fillColor = [26, 26, 46]
+        data.cell.styles.textColor = [255, 255, 255]
+        data.cell.styles.fontStyle = 'bold'
+      }
+    },
+    margin: { left: pageWidth / 2, right: 14 },
+  })
+
+  doc.save(`quotation-${quoteNumber || 'draft'}.pdf`)
+}
 
   function printQuote(q) {
     const printWindow = window.open('', '_blank')

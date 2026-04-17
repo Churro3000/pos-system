@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers } from '../lib/supabase'
+import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers, supabase } from '../lib/supabase'
 import { Printer, Save, Plus, Trash2, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -22,7 +22,7 @@ function emptyPage(pageNum) {
   return { id: pageNum, rows: [emptyRow(), emptyRow(), emptyRow()] }
 }
 
-function Purchase({ editingInvoice, onClearEdit }) {
+function Purchase() {
   const [supplierName, setSupplierName] = useState('')
   const [supplierContact, setSupplierContact] = useState('')
   const [supplierEmail, setSupplierEmail] = useState('')
@@ -42,30 +42,9 @@ function Purchase({ editingInvoice, onClearEdit }) {
   const [autoFillMessages, setAutoFillMessages] = useState({})
 
   useEffect(() => {
-  fetchSuppliers()
-  fetchExistingProducts()
-}, [])
-
-useEffect(() => {
-  if (editingInvoice) {
-    setSupplierName(editingInvoice.supplier_name || '')
-    setSupplierContact(editingInvoice.supplier_contact || '')
-    setSupplierEmail(editingInvoice.supplier_email || '')
-    setInvoiceNumber(editingInvoice.invoice_number || '')
-    setNotes(editingInvoice.notes || '')
-    setPendingPayment(editingInvoice.pending_payment || false)
-    const loadedRows = editingInvoice.items.map(item => ({
-      code: item.barcode || '',
-      description: item.name || '',
-      quantity: item.quantity || '',
-      price: item.cost_price || '',
-      selling_price: item.selling_price || '',
-      discount: item.discount || '',
-      vat_included: item.vat_included !== false,
-    }))
-    setPages([{ id: 1, rows: loadedRows.length > 0 ? loadedRows : [emptyRow()] }])
-  }
-}, [editingInvoice])
+    fetchSuppliers()
+    fetchExistingProducts()
+  }, [])
 
   async function fetchSuppliers() {
     const data = await getSuppliers()
@@ -200,160 +179,180 @@ useEffect(() => {
   }
 
   async function handleSave() {
-    if (!supplierName) {
-      setMessage('Please enter supplier name!')
-      setMessageType('error')
-      return
-    }
-    const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
-    if (activeRows.length === 0) {
-      setMessage('Please add at least one product!')
-      setMessageType('error')
-      return
-    }
-
-    setSaving(true)
-    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
-
-    await saveSupplier({ name: supplierName, contact: supplierContact, email: supplierEmail })
-
-    const purchase = {
-      supplier_name: supplierName,
-      supplier_contact: supplierContact,
-      supplier_email: supplierEmail,
-      invoice_number: invoiceNumber,
-      notes,
-      pending_payment: pendingPayment,
-      discount_total: lineDiscountTotal,
-      items: activeRows.map(r => ({
-        barcode: r.code,
-        name: r.description,
-        quantity: parseFloat(r.quantity) || 0,
-        cost_price: parseFloat(r.price) || 0,
-        selling_price: parseFloat(r.selling_price) || 0,
-        vat_included: r.vat_included,
-        discount: parseFloat(r.discount) || 0,
-        line_total: getLineTotalWithVAT(r),
-      })),
-      total_excluding_vat: totalExclusive,
-      total_vat: totalVAT,
-      total_including_vat: total,
-    }
-
-    const error = await savePurchase(purchase)
-    if (error) {
-      setMessage('Error saving purchase: ' + error.message)
-      setMessageType('error')
-      setSaving(false)
-      return
-    }
-
-    // Add/update products in inventory
-    const currentProducts = await getProducts()
-    for (const r of activeRows) {
-      if (!r.description) continue
-      const existing = currentProducts.find(e =>
-        e.barcode === r.code || e.name.toLowerCase() === r.description.toLowerCase()
-      )
-      const newStock = existing
-        ? existing.stock + (parseFloat(r.quantity) || 0)
-        : parseFloat(r.quantity) || 0
-      await saveProduct({
-        barcode: r.code || existing?.barcode || `GEN-${Date.now()}-${Math.random()}`,
-        name: r.description,
-        cost_price: parseFloat(r.price) || 0,
-        selling_price: parseFloat(r.selling_price) || existing?.selling_price || parseFloat(r.price) * 1.3,
-        stock: newStock,
-        low_stock_alert: existing?.low_stock_alert || 5,
-      })
-    }
-
-    setMessage('Purchase invoice saved and inventory updated!')
-    setMessageType('success')
-    setSupplierName('')
-    setSupplierContact('')
-    setSupplierEmail('')
-    setInvoiceNumber('')
-    setNotes('')
-    setPendingPayment(false)
-    setPages([emptyPage(1)])
-    fetchSuppliers()
-    fetchExistingProducts()
-    setSaving(false)
+  if (!supplierName) {
+    setMessage('Please enter supplier name!')
+    setMessageType('error')
+    return
   }
+  const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
+  if (activeRows.length === 0) {
+    setMessage('Please add at least one product!')
+    setMessageType('error')
+    return
+  }
+
+  setSaving(true)
+  const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+
+  await saveSupplier({ name: supplierName, contact: supplierContact, email: supplierEmail })
+
+  const purchaseData = {
+    supplier_name: supplierName,
+    supplier_contact: supplierContact,
+    supplier_email: supplierEmail,
+    invoice_number: invoiceNumber,
+    notes,
+    pending_payment: pendingPayment,
+    discount_total: lineDiscountTotal,
+    items: activeRows.map(r => ({
+      barcode: r.code,
+      name: r.description,
+      quantity: parseFloat(r.quantity) || 0,
+      cost_price: parseFloat(r.price) || 0,
+      selling_price: parseFloat(r.selling_price) || 0,
+      vat_included: r.vat_included,
+      discount: parseFloat(r.discount) || 0,
+      line_total: getLineTotalWithVAT(r),
+    })),
+    total_excluding_vat: totalExclusive,
+    total_vat: totalVAT,
+    total_including_vat: total,
+  }
+
+  let error
+  if (editingInvoice) {
+    // Update existing invoice
+    const { error: updateError } = await supabase
+      .from('purchases')
+      .update(purchaseData)
+      .eq('id', editingInvoice.id)
+    error = updateError
+  } else {
+    error = await savePurchase(purchaseData)
+  }
+
+  if (error) {
+    setMessage('Error saving purchase: ' + error.message)
+    setMessageType('error')
+    setSaving(false)
+    return
+  }
+
+  // Add/update products in inventory
+  const currentProducts = await getProducts()
+  for (const r of activeRows) {
+    if (!r.description) continue
+    const existing = currentProducts.find(e =>
+      e.barcode === r.code || e.name.toLowerCase() === r.description.toLowerCase()
+    )
+    const newStock = existing
+      ? existing.stock + (parseFloat(r.quantity) || 0)
+      : parseFloat(r.quantity) || 0
+    await saveProduct({
+      barcode: r.code || existing?.barcode || `GEN-${Date.now()}-${Math.random()}`,
+      name: r.description,
+      cost_price: parseFloat(r.price) || 0,
+      selling_price: parseFloat(r.selling_price) || existing?.selling_price || parseFloat(r.price) * 1.3,
+      stock: newStock,
+      low_stock_alert: existing?.low_stock_alert || 5,
+    })
+  }
+
+  setMessage(editingInvoice ? 'Invoice updated successfully!' : 'Purchase invoice saved!')
+  setMessageType('success')
+  setSupplierName('')
+  setSupplierContact('')
+  setSupplierEmail('')
+  setInvoiceNumber('')
+  setNotes('')
+  setPendingPayment(false)
+  setPages([emptyPage(1)])
+  if (onClearEdit) onClearEdit()
+  fetchSuppliers()
+  fetchExistingProducts()
+  setSaving(false)
+}
 
   function downloadPDF() {
-    const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
-    const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.getWidth()
+  const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
+  const activeRows = getAllRows().filter(r => r.description && r.price && r.quantity)
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
 
-    doc.setFillColor(26, 26, 46)
-    doc.rect(0, 0, pageWidth, 35, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text('PURCHASE INVOICE', pageWidth / 2, 15, { align: 'center' })
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Invoice No: ${invoiceNumber || '—'}   Date: ${invoiceDate}`, pageWidth / 2, 25, { align: 'center' })
+  // Header
+  doc.setFillColor(26, 26, 46)
+  doc.rect(0, 0, pageWidth, 35, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.text('PURCHASE INVOICE', pageWidth / 2, 15, { align: 'center' })
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Invoice No: ${invoiceNumber || '—'}   Date: ${invoiceDate}`, pageWidth / 2, 25, { align: 'center' })
 
-    doc.setTextColor(50, 50, 50)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.text(supplierName || 'Supplier Name', 14, 45)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    if (supplierContact) doc.text(supplierContact, 14, 52)
-    if (supplierEmail) doc.text(supplierEmail, 14, 58)
-    if (notes) doc.text(`Notes: ${notes}`, 14, 65)
+  // Supplier info
+  doc.setTextColor(50, 50, 50)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text(supplierName || 'Supplier Name', 14, 45)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  let yPos = 52
+  if (supplierContact) { doc.text(supplierContact, 14, yPos); yPos += 7 }
+  if (supplierEmail) { doc.text(supplierEmail, 14, yPos); yPos += 7 }
+  if (notes) { doc.text(`Notes: ${notes}`, 14, yPos) }
 
-    autoTable(doc, {
-      startY: 72,
-      head: [['Code', 'Description', 'Qty', 'Cost Price', 'Selling Price', 'Discount %', 'VAT', 'Total']],
-      body: activeRows.map(r => [
-        r.code || '—',
-        r.description,
-        r.quantity,
-        `P${parseFloat(r.price || 0).toFixed(2)}`,
-        `P${parseFloat(r.selling_price || 0).toFixed(2)}`,
-        r.discount ? `${r.discount}%` : '0%',
-        r.vat_included ? 'Incl.' : 'Excl.',
-        `P${getLineTotalWithVAT(r).toFixed(2)}`,
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      margin: { left: 14, right: 14 },
-    })
+  // Items table
+  autoTable(doc, {
+    startY: 72,
+    head: [['Code', 'Description', 'Qty', 'Cost Price', 'Selling Price', 'Discount %', 'VAT', 'Total']],
+    body: activeRows.map(r => [
+      r.code || '—',
+      r.description,
+      r.quantity,
+      `P${parseFloat(r.price || 0).toFixed(2)}`,
+      `P${parseFloat(r.selling_price || 0).toFixed(2)}`,
+      r.discount ? `${r.discount}%` : '0%',
+      r.vat_included ? 'Incl.' : 'Excl.',
+      `P${getLineTotalWithVAT(r).toFixed(2)}`,
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    margin: { left: 14, right: 14 },
+  })
 
-    const finalY = doc.lastAutoTable.finalY + 10
-    autoTable(doc, {
-      startY: finalY,
-      body: [
-        ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
-        ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
-        ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
-        ['TOTAL', `P${total.toFixed(2)}`],
-      ],
-      theme: 'grid',
-      columnStyles: {
-        0: { halign: 'right', fontStyle: 'bold' },
-        1: { halign: 'right' },
-      },
-      bodyStyles: { fontSize: 9 },
-      didParseCell: (data) => {
-        if (data.row.index === 3) {
-          data.cell.styles.fillColor = [26, 26, 46]
-          data.cell.styles.textColor = [255, 255, 255]
-          data.cell.styles.fontStyle = 'bold'
-        }
-      },
-      margin: { left: pageWidth / 2, right: 14 },
-    })
+  // Summary box pinned to bottom
+  const summaryHeight = 4 * 14 + 10 // 4 rows approx
+  const summaryY = pageHeight - summaryHeight - 20
 
-    doc.save(`purchase-invoice-${invoiceNumber || 'draft'}.pdf`)
-  }
+  autoTable(doc, {
+    startY: summaryY,
+    body: [
+      ['Line Discount Total', `P${lineDiscountTotal.toFixed(2)}`],
+      ['Total Exclusive', `P${totalExclusive.toFixed(2)}`],
+      ['VAT (14%)', `P${totalVAT.toFixed(2)}`],
+      ['TOTAL', `P${total.toFixed(2)}`],
+    ],
+    theme: 'grid',
+    columnStyles: {
+      0: { halign: 'right', fontStyle: 'bold' },
+      1: { halign: 'right' },
+    },
+    bodyStyles: { fontSize: 9 },
+    didParseCell: (data) => {
+      if (data.row.index === 3) {
+        data.cell.styles.fillColor = [26, 26, 46]
+        data.cell.styles.textColor = [255, 255, 255]
+        data.cell.styles.fontStyle = 'bold'
+      }
+    },
+    margin: { left: pageWidth / 2, right: 14 },
+  })
+
+  doc.save(`purchase-invoice-${invoiceNumber || 'draft'}.pdf`)
+}
 
   const { lineDiscountTotal, totalExclusive, totalVAT, total } = getSummary()
 
@@ -380,7 +379,7 @@ useEffect(() => {
             <Download size={15} /> Download PDF
           </button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>
-            <Save size={15} /> {saving ? 'Saving...' : 'Save Invoice'}
+            <Save size={15} /> {saving ? 'Saving...' : editingInvoice ? 'Update Invoice' : 'Save Invoice'}
           </button>
         </div>
       </div>
