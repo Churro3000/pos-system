@@ -3,6 +3,7 @@ import { getSuppliers, getPurchases, supabase } from '../lib/supabase'
 import { Factory, ChevronDown, ChevronUp, Clock, CheckCircle, Download, Edit2, Trash2 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { useLogo } from '../lib/useLogo'
 
 function Suppliers({ onEditInvoice }) {
   const [suppliers, setSuppliers] = useState([])
@@ -11,6 +12,9 @@ function Suppliers({ onEditInvoice }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null)
   const [expandedInvoice, setExpandedInvoice] = useState(null)
   const [message, setMessage] = useState('')
+
+  // Added for invoice logo
+  const { logoUrl: invoiceLogoUrl, logoShape: invoiceLogoShape } = useLogo('invoice')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -37,78 +41,104 @@ function Suppliers({ onEditInvoice }) {
     }
   }
 
-  function downloadInvoicePDF(purchase) {
-  const doc = new jsPDF()
-  const pageWidth = doc.internal.pageSize.getWidth()
-  const pageHeight = doc.internal.pageSize.getHeight()
+  // FIXED & IMPROVED: Now properly waits for the logo before printing PDF
+  async function downloadInvoicePDF(purchase) {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
 
-  doc.setFillColor(26, 26, 46)
-  doc.rect(0, 0, pageWidth, 35, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(18)
-  doc.setFont('helvetica', 'bold')
-  doc.text('PURCHASE INVOICE', pageWidth / 2, 15, { align: 'center' })
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Invoice No: ${purchase.invoice_number || '—'}   Date: ${new Date(purchase.created_at).toLocaleDateString()}`, pageWidth / 2, 25, { align: 'center' })
+    // Header background
+    doc.setFillColor(26, 26, 46)
+    doc.rect(0, 0, pageWidth, 35, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.text('PURCHASE INVOICE', pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Invoice No: ${purchase.invoice_number || '—'}   Date: ${new Date(purchase.created_at).toLocaleDateString()}`, pageWidth / 2, 25, { align: 'center' })
 
-  doc.setTextColor(50, 50, 50)
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.text(purchase.supplier_name, 14, 45)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  let yPos = 52
-  if (purchase.supplier_contact) { doc.text(purchase.supplier_contact, 14, yPos); yPos += 7 }
-  if (purchase.supplier_email) { doc.text(purchase.supplier_email, 14, yPos); yPos += 7 }
-  if (purchase.notes) { doc.text(`Notes: ${purchase.notes}`, 14, yPos) }
+    // Supplier Information
+    doc.setTextColor(50, 50, 50)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'bold')
+    doc.text(purchase.supplier_name, 14, 45)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    let yPos = 52
+    if (purchase.supplier_contact) { doc.text(purchase.supplier_contact, 14, yPos); yPos += 7 }
+    if (purchase.supplier_email) { doc.text(purchase.supplier_email, 14, yPos); yPos += 7 }
+    if (purchase.notes) { doc.text(`Notes: ${purchase.notes}`, 14, yPos) }
 
-  autoTable(doc, {
-    startY: 72,
-    head: [['Code', 'Description', 'Qty', 'Cost Price', 'Selling Price', 'Discount %', 'VAT', 'Total']],
-    body: purchase.items.map(item => [
-      item.barcode || '—',
-      item.name,
-      item.quantity,
-      `P${parseFloat(item.cost_price).toFixed(2)}`,
-      `P${parseFloat(item.selling_price || 0).toFixed(2)}`,
-      item.discount ? `${item.discount}%` : '0%',
-      item.vat_included ? 'Incl.' : 'Excl.',
-      `P${parseFloat(item.line_total || 0).toFixed(2)}`,
-    ]),
-    theme: 'grid',
-    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
-    bodyStyles: { fontSize: 8 },
-    margin: { left: 14, right: 14 },
-  })
+    // Add logo to PDF (Properly handled with async loading)
+    if (invoiceLogoUrl) {
+      try {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.src = invoiceLogoUrl
 
-  // Summary pinned to bottom
-  const summaryHeight = 4 * 14 + 10
-  const summaryY = pageHeight - summaryHeight - 20
+        await new Promise((resolve) => {
+          img.onload = resolve
+          img.onerror = resolve // continue even if logo fails to load
+        })
 
-  autoTable(doc, {
-    startY: summaryY,
-    body: [
-      ['Line Discount Total', `P${parseFloat(purchase.discount_total || 0).toFixed(2)}`],
-      ['Total Exclusive', `P${parseFloat(purchase.total_excluding_vat).toFixed(2)}`],
-      ['VAT (14%)', `P${parseFloat(purchase.total_vat).toFixed(2)}`],
-      ['TOTAL', `P${parseFloat(purchase.total_including_vat).toFixed(2)}`],
-    ],
-    theme: 'grid',
-    columnStyles: { 0: { halign: 'right', fontStyle: 'bold' }, 1: { halign: 'right' } },
-    bodyStyles: { fontSize: 9 },
-    didParseCell: (data) => {
-      if (data.row.index === 3) {
-        data.cell.styles.fillColor = [26, 26, 46]
-        data.cell.styles.textColor = [255, 255, 255]
-        data.cell.styles.fontStyle = 'bold'
+        const logoWidth = invoiceLogoShape === 'rectangle' ? 45 : 30
+        const logoHeight = invoiceLogoShape === 'rectangle' ? 22 : 30
+
+        // Place logo at top right
+        doc.addImage(img, 'PNG', pageWidth - 14 - logoWidth, 8, logoWidth, logoHeight)
+      } catch (e) {
+        console.log('Logo could not be added to PDF')
       }
-    },
-    margin: { left: pageWidth / 2, right: 14 },
-  })
+    }
 
-  doc.save(`invoice-${purchase.invoice_number || purchase.id}.pdf`)
-}
+    // Items Table
+    autoTable(doc, {
+      startY: 72,
+      head: [['Code', 'Description', 'Qty', 'Cost Price', 'Selling Price', 'Discount %', 'VAT', 'Total']],
+      body: purchase.items.map(item => [
+        item.barcode || '—',
+        item.name,
+        item.quantity,
+        `P${parseFloat(item.cost_price).toFixed(2)}`,
+        `P${parseFloat(item.selling_price || 0).toFixed(2)}`,
+        item.discount ? `${item.discount}%` : '0%',
+        item.vat_included ? 'Incl.' : 'Excl.',
+        `P${parseFloat(item.line_total || 0).toFixed(2)}`,
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Summary at bottom
+    const summaryHeight = 4 * 14 + 10
+    const summaryY = pageHeight - summaryHeight - 20
+
+    autoTable(doc, {
+      startY: summaryY,
+      body: [
+        ['Line Discount Total', `P${parseFloat(purchase.discount_total || 0).toFixed(2)}`],
+        ['Total Exclusive', `P${parseFloat(purchase.total_excluding_vat).toFixed(2)}`],
+        ['VAT (14%)', `P${parseFloat(purchase.total_vat).toFixed(2)}`],
+        ['TOTAL', `P${parseFloat(purchase.total_including_vat).toFixed(2)}`],
+      ],
+      theme: 'grid',
+      columnStyles: { 0: { halign: 'right', fontStyle: 'bold' }, 1: { halign: 'right' } },
+      bodyStyles: { fontSize: 9 },
+      didParseCell: (data) => {
+        if (data.row.index === 3) {
+          data.cell.styles.fillColor = [26, 26, 46]
+          data.cell.styles.textColor = [255, 255, 255]
+          data.cell.styles.fontStyle = 'bold'
+        }
+      },
+      margin: { left: pageWidth / 2, right: 14 },
+    })
+
+    doc.save(`invoice-${purchase.invoice_number || purchase.id}.pdf`)
+  }
 
   if (loading) return <div className="panel"><p className="empty">Loading suppliers...</p></div>
 
@@ -217,6 +247,13 @@ function Suppliers({ onEditInvoice }) {
                   <div className="a4-invoice-preview">
                     <div className="invoice-top">
                       <div className="invoice-supplier">
+                        {invoiceLogoUrl && (
+                          <img
+                            src={invoiceLogoUrl}
+                            alt="Company Logo"
+                            className={`invoice-logo ${invoiceLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
+                          />
+                        )}
                         <h1 className="invoice-title">PURCHASE INVOICE</h1>
                         <div className="invoice-value bold">{purchase.supplier_name}</div>
                         {purchase.supplier_contact && <div className="invoice-value">{purchase.supplier_contact}</div>}

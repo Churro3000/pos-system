@@ -3,6 +3,7 @@ import { saveQuotation, getQuotations } from '../lib/supabase'
 import { Printer, Save, Plus, Trash2, FileText, ChevronDown, ChevronUp, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { useLogo } from '../lib/useLogo'
 
 const VAT_RATE = 0.14
 
@@ -29,6 +30,9 @@ function Quotation() {
   const [quotations, setQuotations] = useState([])
   const [expandedQuote, setExpandedQuote] = useState(null)
   const [editingCell, setEditingCell] = useState(null)
+
+  // Added for invoice logo
+  const { logoUrl: invoiceLogoUrl, logoShape: invoiceLogoShape } = useLogo('invoice')
 
   useEffect(() => { fetchQuotations() }, [])
 
@@ -308,6 +312,13 @@ function Quotation() {
         <div key={page.id} className="a4-invoice">
           <div className="invoice-top">
             <div className="invoice-supplier">
+              {invoiceLogoUrl && (
+                <img
+                  src={invoiceLogoUrl}
+                  alt="Company Logo"
+                  className={`invoice-logo ${invoiceLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
+                />
+              )}
               <h1 className="invoice-title">QUOTATION</h1>
               {pageIndex > 0 && <p style={{ color: '#888', fontSize: '0.85rem' }}>Continued — Page {pageIndex + 1}</p>}
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLogo } from '../lib/useLogo'
 
 const VAT_RATE = 0.14
 
@@ -8,6 +9,9 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, discountPe
   const [storeAddress, setStoreAddress] = useState('123 Main Street, City')
   const [editingField, setEditingField] = useState(null)
   const [printed, setPrinted] = useState(false)
+
+  // Added for receipt logo
+  const { logoUrl: receiptLogoUrl, logoShape: receiptLogoShape } = useLogo('receipt')
 
   function updateItem(index, field, value) {
     const updated = [...editableItems]
@@ -64,7 +68,13 @@ function ReceiptPreview({ items, subtotal, vatAmount, discountAmount, discountPe
 
         <div className="receipt-paper" id="receipt">
           <div className="receipt-header">
-            <img src="https://placehold.co/80x80?text=LOGO" alt="Store Logo" className="store-logo" />
+            {receiptLogoUrl && (
+              <img
+                src={receiptLogoUrl}
+                alt="Store Logo"
+                className={`store-logo ${receiptLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
+              />
+            )}
             {editingField === 'storeName' ? (
               <input autoFocus value={storeName} onChange={e => setStoreName(e.target.value)}
                 onBlur={() => setEditingField(null)} className="edit-input centered" />

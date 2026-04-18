@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShoppingCart, Package, FileText, ClipboardList, TrendingUp, LayoutDashboard, Factory } from 'lucide-react'
+import { ShoppingCart, Package, FileText, ClipboardList, TrendingUp, LayoutDashboard, Factory, Settings as SettingsIcon } from 'lucide-react'
 import Inventory from './components/Inventory'
 import Checkout from './components/Checkout'
 import Dashboard from './components/Dashboard'
@@ -7,6 +7,7 @@ import Sales from './components/Sales'
 import Purchase from './components/Purchase'
 import Quotation from './components/Quotation'
 import Suppliers from './components/Suppliers'
+import Settings from './components/Settings'
 import './App.css'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
     { id: 'quotation', label: 'Quotation', icon: <ClipboardList size={16} /> },
     { id: 'sales', label: 'Sales', icon: <TrendingUp size={16} /> },
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> },
   ]
 
   return (
@@ -56,6 +58,7 @@ function App() {
         {mode === 'quotation' && <Quotation />}
         {mode === 'sales' && <Sales />}
         {mode === 'dashboard' && <Dashboard />}
+        {mode === 'settings' && <Settings />}
       </main>
     </div>
   )

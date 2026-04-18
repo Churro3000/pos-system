@@ -3,6 +3,7 @@ import { savePurchase, saveProduct, saveSupplier, getProducts, getSuppliers, sup
 import { Printer, Save, Plus, Trash2, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { useLogo } from '../lib/useLogo'
 
 const VAT_RATE = 0.14
 
@@ -32,6 +33,9 @@ function Purchase({ editingInvoice, onClearEdit }) {
   const [filteredSuppliers, setFilteredSuppliers] = useState([])
   const [editingCell, setEditingCell] = useState(null)
   const [autoFillMessages, setAutoFillMessages] = useState({})
+
+  // Added for invoice logo
+  const { logoUrl: invoiceLogoUrl, logoShape: invoiceLogoShape } = useLogo('invoice')
 
   useEffect(() => {
     fetchSuppliers()
@@ -390,6 +394,13 @@ function Purchase({ editingInvoice, onClearEdit }) {
         <div key={page.id} className="a4-invoice">
           <div className="invoice-top">
             <div className="invoice-supplier">
+              {invoiceLogoUrl && (
+                <img
+                  src={invoiceLogoUrl}
+                  alt="Company Logo"
+                  className={`invoice-logo ${invoiceLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
+                />
+              )}
               <h1 className="invoice-title">PURCHASE INVOICE</h1>
               {pageIndex > 0 && <p style={{ color: '#888', fontSize: '0.85rem' }}>Continued — Page {pageIndex + 1}</p>}
 
