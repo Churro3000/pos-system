@@ -10,6 +10,7 @@ function Settings() {
   const [uploading, setUploading] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
+
   const [storeName, setStoreName] = useState(localStorage.getItem('storeName') || 'MY SHOP')
   const [storeAddress, setStoreAddress] = useState(localStorage.getItem('storeAddress') || '123 Main Street, City')
   const [vatRegNo, setVatRegNo] = useState(localStorage.getItem('vatRegNo') || '00000000')
@@ -46,29 +47,28 @@ function Settings() {
       console.error('Error loading logos:', e)
     }
 
-    // Load shapes from localStorage
-    const rShape = localStorage.getItem('receiptLogoShape') || 'square'
-    const iShape = localStorage.getItem('invoiceLogoShape') || 'square'
-    setReceiptLogoShape(rShape)
-    setInvoiceLogoShape(iShape)
+    // Load shapes
+    setReceiptLogoShape(localStorage.getItem('receiptLogoShape') || 'square')
+    setInvoiceLogoShape(localStorage.getItem('invoiceLogoShape') || 'square')
   }
 
   async function uploadLogo(file, type) {
     if (!file) return
 
     setUploading(type)
+    const timestamp = Date.now()
     const ext = file.name.split('.').pop().toLowerCase()
-    const filename = `${type}-logo.${ext}`
+    const filename = `${type}-logo-${timestamp}.${ext}`   // ← This fixes the caching problem
 
     try {
-      // Remove old file if exists
+      // 1. Delete any old logo for this type
       const { data: existing } = await supabase.storage.from('logos').list('')
-      const oldFile = existing?.find(f => f.name.startsWith(`${type}-logo`))
-      if (oldFile) {
-        await supabase.storage.from('logos').remove([oldFile.name])
+      const oldFiles = existing?.filter(f => f.name.startsWith(`${type}-logo`)) || []
+      if (oldFiles.length > 0) {
+        await supabase.storage.from('logos').remove(oldFiles.map(f => f.name))
       }
 
-      // Upload new file
+      // 2. Upload new file with timestamp
       const { error } = await supabase.storage
         .from('logos')
         .upload(filename, file, { 
@@ -78,7 +78,7 @@ function Settings() {
 
       if (error) throw error
 
-      // Get public URL
+      // 3. Get the new public URL
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filename)
 
       if (type === 'receipt') {
@@ -87,17 +87,20 @@ function Settings() {
         setInvoiceLogo(urlData.publicUrl)
       }
 
-      setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo uploaded successfully!`)
+      setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo updated successfully!`)
       setMessageType('success')
 
-      // Refresh the logos in other components
+      // Notify other components
       window.dispatchEvent(new CustomEvent('logoUpdated', { 
         detail: { type, url: urlData.publicUrl } 
       }))
 
+      // Refresh the list so we see the new file
+      await loadSettings()
+
     } catch (error) {
       console.error(error)
-      setMessage('Upload failed: ' + error.message)
+      setMessage('Upload failed: ' + (error.message || 'Unknown error'))
       setMessageType('error')
     }
 
@@ -109,9 +112,10 @@ function Settings() {
 
     try {
       const { data: existing } = await supabase.storage.from('logos').list('')
-      const oldFile = existing?.find(f => f.name.startsWith(`${type}-logo`))
-      if (oldFile) {
-        await supabase.storage.from('logos').remove([oldFile.name])
+      const oldFiles = existing?.filter(f => f.name.startsWith(`${type}-logo`)) || []
+
+      if (oldFiles.length > 0) {
+        await supabase.storage.from('logos').remove(oldFiles.map(f => f.name))
       }
 
       if (type === 'receipt') setReceiptLogo(null)
@@ -119,8 +123,10 @@ function Settings() {
 
       window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: null } }))
 
-      setMessage('Logo removed!')
+      setMessage('Logo removed successfully!')
       setMessageType('success')
+
+      await loadSettings()
     } catch (e) {
       setMessage('Error removing logo')
       setMessageType('error')
@@ -135,7 +141,6 @@ function Settings() {
       setInvoiceLogoShape(shape)
       localStorage.setItem('invoiceLogoShape', shape)
     }
-
     window.dispatchEvent(new CustomEvent('logoShapeUpdated', { detail: { type, shape } }))
   }
 
@@ -159,7 +164,7 @@ function Settings() {
 
       {message && <p className={`message ${messageType}`}>{message}</p>}
 
-      {/* Store Information - unchanged */}
+      {/* Store Information section remains the same */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Store size={18} />
@@ -187,7 +192,7 @@ function Settings() {
         </button>
       </div>
 
-      {/* Receipt Logo - unchanged UI but uses fixed upload */}
+      {/* Receipt Logo */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Image size={18} />
@@ -212,7 +217,7 @@ function Settings() {
             <div className="logo-upload-placeholder" onClick={() => receiptInputRef.current.click()}>
               <Upload size={28} />
               <p>Click to upload receipt logo</p>
-              <span>PNG, JPG, SVG recommended (max 2MB)</span>
+              <span>PNG, JPG recommended</span>
             </div>
           )}
           <input 
@@ -222,7 +227,7 @@ function Settings() {
             style={{ display: 'none' }} 
             onChange={e => uploadLogo(e.target.files[0], 'receipt')} 
           />
-          {uploading === 'receipt' && <p className="hint">Uploading receipt logo...</p>}
+          {uploading === 'receipt' && <p className="hint">Uploading...</p>}
         </div>
 
         <div className="settings-toggle-row">
@@ -234,7 +239,7 @@ function Settings() {
         </div>
       </div>
 
-      {/* Invoice Logo - same improvements */}
+      {/* Invoice Logo - same structure */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Image size={18} />
@@ -259,7 +264,7 @@ function Settings() {
             <div className="logo-upload-placeholder" onClick={() => invoiceInputRef.current.click()}>
               <Upload size={28} />
               <p>Click to upload invoice/quotation logo</p>
-              <span>PNG, JPG, SVG recommended (max 2MB)</span>
+              <span>PNG, JPG recommended</span>
             </div>
           )}
           <input 
@@ -269,7 +274,7 @@ function Settings() {
             style={{ display: 'none' }} 
             onChange={e => uploadLogo(e.target.files[0], 'invoice')} 
           />
-          {uploading === 'invoice' && <p className="hint">Uploading invoice logo...</p>}
+          {uploading === 'invoice' && <p className="hint">Uploading...</p>}
         </div>
 
         <div className="settings-toggle-row">
