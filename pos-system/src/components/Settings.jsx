@@ -13,79 +13,129 @@ function Settings() {
   const [storeName, setStoreName] = useState(localStorage.getItem('storeName') || 'MY SHOP')
   const [storeAddress, setStoreAddress] = useState(localStorage.getItem('storeAddress') || '123 Main Street, City')
   const [vatRegNo, setVatRegNo] = useState(localStorage.getItem('vatRegNo') || '00000000')
+
   const receiptInputRef = useRef(null)
   const invoiceInputRef = useRef(null)
 
-  useEffect(() => { loadSettings() }, [])
+  useEffect(() => {
+    loadSettings()
+  }, [])
 
   async function loadSettings() {
     try {
-      const { data } = await supabase.storage.from('logos').list('')
-      if (!data) return
-      const receiptFile = data.find(f => f.name.startsWith('receipt-logo'))
-      const invoiceFile = data.find(f => f.name.startsWith('invoice-logo'))
+      const { data: files } = await supabase.storage.from('logos').list('')
+
+      // Receipt logo
+      const receiptFile = files?.find(f => f.name.startsWith('receipt-logo'))
       if (receiptFile) {
         const { data: urlData } = supabase.storage.from('logos').getPublicUrl(receiptFile.name)
         setReceiptLogo(urlData.publicUrl)
+      } else {
+        setReceiptLogo(null)
       }
+
+      // Invoice logo
+      const invoiceFile = files?.find(f => f.name.startsWith('invoice-logo'))
       if (invoiceFile) {
         const { data: urlData } = supabase.storage.from('logos').getPublicUrl(invoiceFile.name)
         setInvoiceLogo(urlData.publicUrl)
+      } else {
+        setInvoiceLogo(null)
       }
-    } catch (e) {}
-    const rShape = localStorage.getItem('receiptLogoShape')
-    const iShape = localStorage.getItem('invoiceLogoShape')
-    if (rShape) setReceiptLogoShape(rShape)
-    if (iShape) setInvoiceLogoShape(iShape)
+    } catch (e) {
+      console.error('Error loading logos:', e)
+    }
+
+    // Load shapes from localStorage
+    const rShape = localStorage.getItem('receiptLogoShape') || 'square'
+    const iShape = localStorage.getItem('invoiceLogoShape') || 'square'
+    setReceiptLogoShape(rShape)
+    setInvoiceLogoShape(iShape)
   }
 
   async function uploadLogo(file, type) {
     if (!file) return
+
     setUploading(type)
-    const ext = file.name.split('.').pop()
+    const ext = file.name.split('.').pop().toLowerCase()
     const filename = `${type}-logo.${ext}`
-    const { data: existing } = await supabase.storage.from('logos').list('')
-    if (existing) {
-      const old = existing.find(f => f.name.startsWith(`${type}-logo`))
-      if (old) await supabase.storage.from('logos').remove([old.name])
-    }
-    const { error } = await supabase.storage.from('logos').upload(filename, file, { upsert: true })
-    if (error) {
-      setMessage('Error uploading: ' + error.message)
-      setMessageType('error')
-    } else {
+
+    try {
+      // Remove old file if exists
+      const { data: existing } = await supabase.storage.from('logos').list('')
+      const oldFile = existing?.find(f => f.name.startsWith(`${type}-logo`))
+      if (oldFile) {
+        await supabase.storage.from('logos').remove([oldFile.name])
+      }
+
+      // Upload new file
+      const { error } = await supabase.storage
+        .from('logos')
+        .upload(filename, file, { 
+          upsert: true,
+          contentType: file.type 
+        })
+
+      if (error) throw error
+
+      // Get public URL
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filename)
+
       if (type === 'receipt') {
         setReceiptLogo(urlData.publicUrl)
-        localStorage.setItem('receiptLogoUrl', urlData.publicUrl)
       } else {
         setInvoiceLogo(urlData.publicUrl)
-        localStorage.setItem('invoiceLogoUrl', urlData.publicUrl)
       }
-      setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo uploaded!`)
+
+      setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo uploaded successfully!`)
       setMessageType('success')
-      window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: urlData.publicUrl } }))
+
+      // Refresh the logos in other components
+      window.dispatchEvent(new CustomEvent('logoUpdated', { 
+        detail: { type, url: urlData.publicUrl } 
+      }))
+
+    } catch (error) {
+      console.error(error)
+      setMessage('Upload failed: ' + error.message)
+      setMessageType('error')
     }
+
     setUploading(null)
   }
 
   async function removeLogo(type) {
     if (!window.confirm('Remove this logo?')) return
-    const { data: existing } = await supabase.storage.from('logos').list('')
-    if (existing) {
-      const old = existing.find(f => f.name.startsWith(`${type}-logo`))
-      if (old) await supabase.storage.from('logos').remove([old.name])
+
+    try {
+      const { data: existing } = await supabase.storage.from('logos').list('')
+      const oldFile = existing?.find(f => f.name.startsWith(`${type}-logo`))
+      if (oldFile) {
+        await supabase.storage.from('logos').remove([oldFile.name])
+      }
+
+      if (type === 'receipt') setReceiptLogo(null)
+      else setInvoiceLogo(null)
+
+      window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: null } }))
+
+      setMessage('Logo removed!')
+      setMessageType('success')
+    } catch (e) {
+      setMessage('Error removing logo')
+      setMessageType('error')
     }
-    if (type === 'receipt') { setReceiptLogo(null); localStorage.removeItem('receiptLogoUrl') }
-    else { setInvoiceLogo(null); localStorage.removeItem('invoiceLogoUrl') }
-    window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: null } }))
-    setMessage('Logo removed!')
-    setMessageType('success')
   }
 
   function handleShapeChange(type, shape) {
-    if (type === 'receipt') { setReceiptLogoShape(shape); localStorage.setItem('receiptLogoShape', shape) }
-    else { setInvoiceLogoShape(shape); localStorage.setItem('invoiceLogoShape', shape) }
+    if (type === 'receipt') {
+      setReceiptLogoShape(shape)
+      localStorage.setItem('receiptLogoShape', shape)
+    } else {
+      setInvoiceLogoShape(shape)
+      localStorage.setItem('invoiceLogoShape', shape)
+    }
+
     window.dispatchEvent(new CustomEvent('logoShapeUpdated', { detail: { type, shape } }))
   }
 
@@ -93,7 +143,11 @@ function Settings() {
     localStorage.setItem('storeName', storeName)
     localStorage.setItem('storeAddress', storeAddress)
     localStorage.setItem('vatRegNo', vatRegNo)
-    window.dispatchEvent(new CustomEvent('storeInfoUpdated', { detail: { storeName, storeAddress, vatRegNo } }))
+
+    window.dispatchEvent(new CustomEvent('storeInfoUpdated', { 
+      detail: { storeName, storeAddress, vatRegNo } 
+    }))
+
     setMessage('Store information saved!')
     setMessageType('success')
   }
@@ -105,7 +159,7 @@ function Settings() {
 
       {message && <p className={`message ${messageType}`}>{message}</p>}
 
-      {/* STORE INFO */}
+      {/* Store Information - unchanged */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Store size={18} />
@@ -116,30 +170,15 @@ function Settings() {
         <div className="form-grid" style={{ marginTop: '12px' }}>
           <div className="form-group full">
             <label>Store Name</label>
-            <input
-              type="text"
-              value={storeName}
-              onChange={e => setStoreName(e.target.value)}
-              placeholder="e.g. MY SHOP"
-            />
+            <input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="e.g. MY SHOP" />
           </div>
           <div className="form-group full">
             <label>Store Address</label>
-            <input
-              type="text"
-              value={storeAddress}
-              onChange={e => setStoreAddress(e.target.value)}
-              placeholder="e.g. 123 Main Street, Gaborone"
-            />
+            <input type="text" value={storeAddress} onChange={e => setStoreAddress(e.target.value)} placeholder="e.g. 123 Main Street, Gaborone" />
           </div>
           <div className="form-group">
             <label>VAT Registration Number</label>
-            <input
-              type="text"
-              value={vatRegNo}
-              onChange={e => setVatRegNo(e.target.value)}
-              placeholder="e.g. P03456789"
-            />
+            <input type="text" value={vatRegNo} onChange={e => setVatRegNo(e.target.value)} placeholder="e.g. P03456789" />
           </div>
         </div>
 
@@ -148,7 +187,7 @@ function Settings() {
         </button>
       </div>
 
-      {/* RECEIPT LOGO */}
+      {/* Receipt Logo - unchanged UI but uses fixed upload */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Image size={18} />
@@ -159,11 +198,7 @@ function Settings() {
         <div className="logo-upload-area">
           {receiptLogo ? (
             <div className="logo-preview-wrap">
-              <img
-                src={receiptLogo}
-                alt="Receipt Logo"
-                className={`logo-preview ${receiptLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
-              />
+              <img src={receiptLogo} alt="Receipt Logo" className={`logo-preview ${receiptLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`} />
               <div className="logo-preview-actions">
                 <button className="btn-secondary btn-small" onClick={() => receiptInputRef.current.click()}>
                   <Upload size={13} /> Replace
@@ -177,12 +212,17 @@ function Settings() {
             <div className="logo-upload-placeholder" onClick={() => receiptInputRef.current.click()}>
               <Upload size={28} />
               <p>Click to upload receipt logo</p>
-              <span>PNG, JPG, SVG recommended</span>
+              <span>PNG, JPG, SVG recommended (max 2MB)</span>
             </div>
           )}
-          <input ref={receiptInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => uploadLogo(e.target.files[0], 'receipt')} />
-          {uploading === 'receipt' && <p className="hint">Uploading...</p>}
+          <input 
+            ref={receiptInputRef} 
+            type="file" 
+            accept="image/*" 
+            style={{ display: 'none' }} 
+            onChange={e => uploadLogo(e.target.files[0], 'receipt')} 
+          />
+          {uploading === 'receipt' && <p className="hint">Uploading receipt logo...</p>}
         </div>
 
         <div className="settings-toggle-row">
@@ -194,7 +234,7 @@ function Settings() {
         </div>
       </div>
 
-      {/* INVOICE LOGO */}
+      {/* Invoice Logo - same improvements */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Image size={18} />
@@ -205,11 +245,7 @@ function Settings() {
         <div className="logo-upload-area">
           {invoiceLogo ? (
             <div className="logo-preview-wrap">
-              <img
-                src={invoiceLogo}
-                alt="Invoice Logo"
-                className={`logo-preview ${invoiceLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`}
-              />
+              <img src={invoiceLogo} alt="Invoice Logo" className={`logo-preview ${invoiceLogoShape === 'rectangle' ? 'logo-rect' : 'logo-square'}`} />
               <div className="logo-preview-actions">
                 <button className="btn-secondary btn-small" onClick={() => invoiceInputRef.current.click()}>
                   <Upload size={13} /> Replace
@@ -223,12 +259,17 @@ function Settings() {
             <div className="logo-upload-placeholder" onClick={() => invoiceInputRef.current.click()}>
               <Upload size={28} />
               <p>Click to upload invoice/quotation logo</p>
-              <span>PNG, JPG, SVG recommended</span>
+              <span>PNG, JPG, SVG recommended (max 2MB)</span>
             </div>
           )}
-          <input ref={invoiceInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => uploadLogo(e.target.files[0], 'invoice')} />
-          {uploading === 'invoice' && <p className="hint">Uploading...</p>}
+          <input 
+            ref={invoiceInputRef} 
+            type="file" 
+            accept="image/*" 
+            style={{ display: 'none' }} 
+            onChange={e => uploadLogo(e.target.files[0], 'invoice')} 
+          />
+          {uploading === 'invoice' && <p className="hint">Uploading invoice logo...</p>}
         </div>
 
         <div className="settings-toggle-row">
