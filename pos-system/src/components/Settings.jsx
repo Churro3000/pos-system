@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { Upload, Trash2, Settings as SettingsIcon, Image } from 'lucide-react'
+import { Upload, Trash2, Image, Store } from 'lucide-react'
 
 function Settings() {
   const [receiptLogo, setReceiptLogo] = useState(null)
@@ -10,21 +10,20 @@ function Settings() {
   const [uploading, setUploading] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
+  const [storeName, setStoreName] = useState(localStorage.getItem('storeName') || 'MY SHOP')
+  const [storeAddress, setStoreAddress] = useState(localStorage.getItem('storeAddress') || '123 Main Street, City')
+  const [vatRegNo, setVatRegNo] = useState(localStorage.getItem('vatRegNo') || '00000000')
   const receiptInputRef = useRef(null)
   const invoiceInputRef = useRef(null)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
+  useEffect(() => { loadSettings() }, [])
 
   async function loadSettings() {
     try {
       const { data } = await supabase.storage.from('logos').list('')
       if (!data) return
-
       const receiptFile = data.find(f => f.name.startsWith('receipt-logo'))
       const invoiceFile = data.find(f => f.name.startsWith('invoice-logo'))
-
       if (receiptFile) {
         const { data: urlData } = supabase.storage.from('logos').getPublicUrl(receiptFile.name)
         setReceiptLogo(urlData.publicUrl)
@@ -34,7 +33,6 @@ function Settings() {
         setInvoiceLogo(urlData.publicUrl)
       }
     } catch (e) {}
-
     const rShape = localStorage.getItem('receiptLogoShape')
     const iShape = localStorage.getItem('invoiceLogoShape')
     if (rShape) setReceiptLogoShape(rShape)
@@ -44,21 +42,16 @@ function Settings() {
   async function uploadLogo(file, type) {
     if (!file) return
     setUploading(type)
-
     const ext = file.name.split('.').pop()
     const filename = `${type}-logo.${ext}`
-
-    // Delete old logo first
     const { data: existing } = await supabase.storage.from('logos').list('')
     if (existing) {
       const old = existing.find(f => f.name.startsWith(`${type}-logo`))
       if (old) await supabase.storage.from('logos').remove([old.name])
     }
-
     const { error } = await supabase.storage.from('logos').upload(filename, file, { upsert: true })
-
     if (error) {
-      setMessage('Error uploading logo: ' + error.message)
+      setMessage('Error uploading: ' + error.message)
       setMessageType('error')
     } else {
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(filename)
@@ -71,8 +64,6 @@ function Settings() {
       }
       setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo uploaded!`)
       setMessageType('success')
-
-      // Broadcast to other components
       window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: urlData.publicUrl } }))
     }
     setUploading(null)
@@ -85,35 +76,77 @@ function Settings() {
       const old = existing.find(f => f.name.startsWith(`${type}-logo`))
       if (old) await supabase.storage.from('logos').remove([old.name])
     }
-    if (type === 'receipt') {
-      setReceiptLogo(null)
-      localStorage.removeItem('receiptLogoUrl')
-    } else {
-      setInvoiceLogo(null)
-      localStorage.removeItem('invoiceLogoUrl')
-    }
+    if (type === 'receipt') { setReceiptLogo(null); localStorage.removeItem('receiptLogoUrl') }
+    else { setInvoiceLogo(null); localStorage.removeItem('invoiceLogoUrl') }
     window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { type, url: null } }))
-    setMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} logo removed!`)
+    setMessage('Logo removed!')
     setMessageType('success')
   }
 
   function handleShapeChange(type, shape) {
-    if (type === 'receipt') {
-      setReceiptLogoShape(shape)
-      localStorage.setItem('receiptLogoShape', shape)
-    } else {
-      setInvoiceLogoShape(shape)
-      localStorage.setItem('invoiceLogoShape', shape)
-    }
+    if (type === 'receipt') { setReceiptLogoShape(shape); localStorage.setItem('receiptLogoShape', shape) }
+    else { setInvoiceLogoShape(shape); localStorage.setItem('invoiceLogoShape', shape) }
     window.dispatchEvent(new CustomEvent('logoShapeUpdated', { detail: { type, shape } }))
+  }
+
+  function saveStoreInfo() {
+    localStorage.setItem('storeName', storeName)
+    localStorage.setItem('storeAddress', storeAddress)
+    localStorage.setItem('vatRegNo', vatRegNo)
+    window.dispatchEvent(new CustomEvent('storeInfoUpdated', { detail: { storeName, storeAddress, vatRegNo } }))
+    setMessage('Store information saved!')
+    setMessageType('success')
   }
 
   return (
     <div className="panel">
       <h2>Settings</h2>
-      <p className="hint">Configure your store logos and preferences.</p>
+      <p className="hint">Configure your store details and logos.</p>
 
       {message && <p className={`message ${messageType}`}>{message}</p>}
+
+      {/* STORE INFO */}
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <Store size={18} />
+          <h3>Store Information</h3>
+        </div>
+        <p className="hint">This info appears on every printed receipt.</p>
+
+        <div className="form-grid" style={{ marginTop: '12px' }}>
+          <div className="form-group full">
+            <label>Store Name</label>
+            <input
+              type="text"
+              value={storeName}
+              onChange={e => setStoreName(e.target.value)}
+              placeholder="e.g. MY SHOP"
+            />
+          </div>
+          <div className="form-group full">
+            <label>Store Address</label>
+            <input
+              type="text"
+              value={storeAddress}
+              onChange={e => setStoreAddress(e.target.value)}
+              placeholder="e.g. 123 Main Street, Gaborone"
+            />
+          </div>
+          <div className="form-group">
+            <label>VAT Registration Number</label>
+            <input
+              type="text"
+              value={vatRegNo}
+              onChange={e => setVatRegNo(e.target.value)}
+              placeholder="e.g. P03456789"
+            />
+          </div>
+        </div>
+
+        <button className="btn-primary" style={{ marginTop: '12px' }} onClick={saveStoreInfo}>
+          Save Store Info
+        </button>
+      </div>
 
       {/* RECEIPT LOGO */}
       <div className="settings-section">
@@ -121,7 +154,7 @@ function Settings() {
           <Image size={18} />
           <h3>Receipt Logo</h3>
         </div>
-        <p className="hint">This logo appears at the top of printed receipts.</p>
+        <p className="hint">Appears at the top of printed receipts.</p>
 
         <div className="logo-upload-area">
           {receiptLogo ? (
@@ -147,42 +180,27 @@ function Settings() {
               <span>PNG, JPG, SVG recommended</span>
             </div>
           )}
-          <input
-            ref={receiptInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={e => uploadLogo(e.target.files[0], 'receipt')}
-          />
+          <input ref={receiptInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => uploadLogo(e.target.files[0], 'receipt')} />
           {uploading === 'receipt' && <p className="hint">Uploading...</p>}
         </div>
 
         <div className="settings-toggle-row">
-          <span>Logo Shape:</span>
+          <span>Shape:</span>
           <div className="shape-toggle">
-            <button
-              className={receiptLogoShape === 'square' ? 'active' : ''}
-              onClick={() => handleShapeChange('receipt', 'square')}
-            >
-              Square
-            </button>
-            <button
-              className={receiptLogoShape === 'rectangle' ? 'active' : ''}
-              onClick={() => handleShapeChange('receipt', 'rectangle')}
-            >
-              Rectangle
-            </button>
+            <button className={receiptLogoShape === 'square' ? 'active' : ''} onClick={() => handleShapeChange('receipt', 'square')}>Square</button>
+            <button className={receiptLogoShape === 'rectangle' ? 'active' : ''} onClick={() => handleShapeChange('receipt', 'rectangle')}>Rectangle</button>
           </div>
         </div>
       </div>
 
-      {/* INVOICE / QUOTATION LOGO */}
+      {/* INVOICE LOGO */}
       <div className="settings-section">
         <div className="settings-section-header">
           <Image size={18} />
           <h3>Invoice & Quotation Logo</h3>
         </div>
-        <p className="hint">This logo appears on Purchase invoices and Quotations.</p>
+        <p className="hint">Appears on Purchase invoices and Quotations.</p>
 
         <div className="logo-upload-area">
           {invoiceLogo ? (
@@ -208,31 +226,16 @@ function Settings() {
               <span>PNG, JPG, SVG recommended</span>
             </div>
           )}
-          <input
-            ref={invoiceInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={e => uploadLogo(e.target.files[0], 'invoice')}
-          />
+          <input ref={invoiceInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => uploadLogo(e.target.files[0], 'invoice')} />
           {uploading === 'invoice' && <p className="hint">Uploading...</p>}
         </div>
 
         <div className="settings-toggle-row">
-          <span>Logo Shape:</span>
+          <span>Shape:</span>
           <div className="shape-toggle">
-            <button
-              className={invoiceLogoShape === 'square' ? 'active' : ''}
-              onClick={() => handleShapeChange('invoice', 'square')}
-            >
-              Square
-            </button>
-            <button
-              className={invoiceLogoShape === 'rectangle' ? 'active' : ''}
-              onClick={() => handleShapeChange('invoice', 'rectangle')}
-            >
-              Rectangle
-            </button>
+            <button className={invoiceLogoShape === 'square' ? 'active' : ''} onClick={() => handleShapeChange('invoice', 'square')}>Square</button>
+            <button className={invoiceLogoShape === 'rectangle' ? 'active' : ''} onClick={() => handleShapeChange('invoice', 'rectangle')}>Rectangle</button>
           </div>
         </div>
       </div>
